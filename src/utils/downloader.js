@@ -1,5 +1,5 @@
 import { operatorNumbers } from '../permissions/operators.js';
-import {getPerformanceProfile,mediaDelay} from './performanceMode.js';
+import {getPerformanceProfile,mediaDelay,hostBudget} from './performanceMode.js';
 import {safeRead} from '../recovery/index.js';
 import { spawn } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
@@ -29,7 +29,9 @@ const numOf = (j = '') => String(j).split('@')[0].split(':')[0];
 const isOwnerUser = (userId) => { const o = numOf(config.ownerNumber || ''); const u = numOf(userId); return !!u && (u === o || operatorNumbers().includes(u)); };
 // RAM gate for the owner "never refuse" mode: start new downloads only while RSS is
 // under the gate, so unlimited queueing can never crash the 909MB box.
-const RAM_GATE_MB = Number(process.env.JARVIS_DL_RAM_GATE_MB) || 600;
+// Tab: 600 MB was sized for Jarvis' 909 MB box and never trips on a 308 MB panel server. Default to 85% of the
+// container's memory limit (cgroup), capped at 600 MB. JARVIS_DL_RAM_GATE_MB still overrides.
+export const RAM_GATE_MB = Number(process.env.JARVIS_DL_RAM_GATE_MB) || (() => { try { return Math.min(600, Math.max(160, Math.floor(hostBudget().memory / 1048576 * 0.85))); } catch { return 600; } })();
 const ramOk = () => process.memoryUsage().rss / 1048576 < RAM_GATE_MB;
 
 export class DownloadQueue {

@@ -18,6 +18,9 @@ if (need) {
   console.log('[tab-start] Packages installed.');
 }
 const heap = String(process.env.TAB_HEAP_MB || '200').replace(/\D/g, '') || '200';
-const child = spawn(process.execPath, ['--max-old-space-size=' + heap, 'scripts/runner.js'], { stdio: 'inherit' });
+// Young-generation cap: on Node 24 the default semi-space added ~50 MB of RSS at boot (253 -> 200 MB measured
+// 2026-10-23, same code, QR screen). TAB_SEMI_MB overrides (default 8; 0 = Node's default).
+const semi = String(process.env.TAB_SEMI_MB ?? '8').replace(/\D/g, '');
+const child = spawn(process.execPath, ['--max-old-space-size=' + heap, ...(semi && semi !== '0' ? ['--max-semi-space-size=' + semi] : []), 'scripts/runner.js'], { stdio: 'inherit' });
 for (const s of ['SIGINT', 'SIGTERM']) process.on(s, () => child.kill(s));
 child.on('exit', (code, sig) => process.exit(code ?? (sig ? 1 : 0)));

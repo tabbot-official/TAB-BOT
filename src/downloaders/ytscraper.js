@@ -7,7 +7,7 @@ import config from '../config/config.js';
 import logger from '../utils/logger.js';
 import { DownloadError } from '../utils/downloader.js';
 import { safeFileName } from '../utils/fileManager.js';
-import { fetchPublic } from '../utilities/validation.js';
+import { fetchPublic, fetchPublicStream } from '../utilities/validation.js';
 
 const require = createRequire(import.meta.url);
 const QUALITIES = [144, 360, 480, 720, 1080];
@@ -53,19 +53,26 @@ export async function downloadViaScraper(cleanUrl, { kind, dir, onProgress }) {
   const meta = res.metadata || {};
   const ext = kind === 'audio' ? '.mp3' : '.mp4';
   const file = path.join(dir, `media${ext}`);
+  // Tab: stream to disk instead of buffering the whole file (up to 100 MB) in memory - the panel server has 308 MB.
   let r0;
   try {
-    r0 = await fetchPublic(res.download.url, { maxBytes: config.limits.maxFileBytes + 1, timeoutMs: config.limits.maxDownloadSeconds * 1000 });
+    r0 = await fetchPublicStream(res.download.url, { maxBytes: config.limits.maxFileBytes + 1, timeoutMs: config.limits.maxDownloadSeconds * 1000 });
   } catch (e) {
     if (/too large/i.test(e?.message || '')) throw new DownloadError('📦 That file is too large to send.', { code: 'TOO_LARGE' });
     throw new DownloadError('❌ Unable to download this video.', { code: 'SCRAPER_HTTP' });
   }
-  if (!(r0.status >= 200 && r0.status < 300) || !r0.body?.length) throw new DownloadError('❌ Unable to download this video.', { code: 'SCRAPER_HTTP' });
+  if (!(r0.status >= 200 && r0.status < 300)) { r0.stream.destroy(); throw new DownloadError('❌ Unable to download this video.', { code: 'SCRAPER_HTTP' }); }
   const len = Number(r0.headers['content-length'] || 0);
   const title0 = safeFileName(meta.title || res.download.filename, 'youtube');
   onProgress?.({ name: title0, total: len, received: 0 });
-  fs.writeFileSync(file, r0.body);
-  onProgress?.({ name: title0, total: len, received: r0.body.length });
+  try {
+    await pipeline(r0.stream, fs.createWriteStream(file));
+  } catch (e) {
+    fs.rmSync(file, { force: true });
+    if (/too large/i.test(e?.message || '')) throw new DownloadError('📦 That file is too large to send.', { code: 'TOO_LARGE' });
+    throw new DownloadError('❌ Unable to download this video.', { code: 'SCRAPER_HTTP' });
+  }
+  onProgress?.({ name: title0, total: len, received: fs.statSync(file).size });
   const size = fs.statSync(file).size;
   if (size < 1000) throw new DownloadError('❌ Unable to download this video.', { code: 'SCRAPER_EMPTY' });
   if (size > config.limits.maxFileBytes) {
