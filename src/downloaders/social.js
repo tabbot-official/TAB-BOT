@@ -9,6 +9,8 @@ import {socialFallback} from './platforms.js';
 const domains={instagram:['instagram.com'],facebook:['facebook.com','fb.watch'],twitter:['twitter.com','x.com']};
 export function socialPlatform(url){if(url.protocol!=='https:'||url.username||url.password||url.port)return null;return Object.entries(domains).find(([,hosts])=>hosts.some(h=>url.hostname===h||url.hostname.endsWith('.'+h)))?.[0]||null;}
 export function canonicalSocial(url,platform){if(socialPlatform(url)!==platform)return null;const p=url.pathname;
+ // Tab: Instagram also links posts as /<username>/reel/<id>/ (and /p/, /tv/); keep only /<kind>/<id>/.
+ const igUser=platform==='instagram'?/^\/[A-Za-z0-9._]{1,30}\/((?:reel|reels|p|tv)\/[A-Za-z0-9_-]+\/?)$/.exec(p):null;if(igUser){const u=new URL(url);u.pathname='/'+igUser[1];return canonicalSocial(u,platform);}
  if(platform==='instagram'&&!/^\/(?:reel|reels|p|tv)\/[A-Za-z0-9_-]+\/?$/.test(p))return null;
  if(platform==='twitter'&&!/^\/(?:[A-Za-z0-9_]+\/status|i\/status)\/\d+\/?$/.test(p))return null;
  if(platform==='facebook'&&url.hostname!=='fb.watch'&&!(/\/videos\//.test(p)||/^\/reel\/\d+\/?$/.test(p)||p==='/watch/'&&/^\d+$/.test(url.searchParams.get('v')||'')||/^\/share\/(?:v|r)\/[A-Za-z0-9]+\/?$/.test(p)))return null;

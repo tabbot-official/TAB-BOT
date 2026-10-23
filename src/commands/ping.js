@@ -1,5 +1,6 @@
 export default {
   name: 'ping',
+  aliases: ['alive'], // Tab: common bot command; ".alive" was unknown
   category: 'General',
   description: 'Check that the bot is alive and how fast it replies',
   usage: 'ping',

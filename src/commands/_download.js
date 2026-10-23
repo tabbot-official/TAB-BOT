@@ -5,7 +5,7 @@ import fs from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import config from '../config/config.js';
 import logger from '../utils/logger.js';
-import { fetchMedia } from '../downloaders/index.js';
+import { fetchMedia, detectPlatform } from '../downloaders/index.js';
 import { DownloadError, downloadQueue, runYtDlp } from '../utils/downloader.js';
 import { createJobDir, removeJobDir, freeDiskBytes } from '../utils/fileManager.js';
 import { sendMediaFile } from '../utils/sender.js';
@@ -91,6 +91,8 @@ export async function runDownloadCommand(ctx, { expect, kind, label }) {
       await ctx.reply(`🔎 ${hit.title}`);
       rawUrl = hit.url;
     }
+    // Tab: reject a non-link before it waits in the download queue (it used to wait its turn, then fail).
+    if (SOCIAL_EXPECT.has(expect) && !pinSearch && !detectPlatform(rawUrl).url) throw new DownloadError('❌ Please send a valid link starting with https://', { code: 'INVALID' });
     if ((await freeDiskBytes()) < config.limits.minFreeDiskBytes) {
       throw new DownloadError('💾 The server is low on disk space. Please try again later.', { code: 'DISK' });
     }

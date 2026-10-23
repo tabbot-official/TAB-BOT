@@ -7,6 +7,8 @@ import { defineCommand } from './_kit.js';
 import config from '../config/config.js';
 import logger from '../utils/logger.js';
 import { createJobDir, removeJobDir } from '../utils/fileManager.js';
+import { runYtDlp } from '../utils/downloader.js';
+import { sendMediaFile } from '../utils/sender.js';
 import { fileTypeFromFile } from 'file-type';
 import { streamToFile } from '../commands/xvideos.js';
 import { tiktokDownload } from '../vendor/zenbot/tiktok.js';
@@ -60,6 +62,18 @@ async function tiktokInfo(url) {
   }
 }
 
+// Tab: tikwm is a single free API; when it fails, try yt-dlp's TikTok extractor before giving up (video only).
+export async function tiktokViaYtDlp(ctx, url, caption = '') {
+  let dir = null;
+  try {
+    dir = await createJobDir();
+    await runYtDlp(['-f', 'b[ext=mp4]/b', '--max-filesize', String(config.limits.maxFileBytes), '--socket-timeout', '15', '--retries', '1', '-o', path.join(dir, 'tt.%(ext)s'), url], { cwd: dir, useCookies: false, timeoutMs: 120000 });
+    const names = (await fs.readdir(dir)).filter((n) => /^tt\.(mp4|webm|mov)$/.test(n));
+    if (names.length !== 1) throw new Error('yt-dlp returned no video');
+    await sendMediaFile(ctx.sock, ctx.jid, { path: path.join(dir, names[0]), type: 'video', mimetype: 'video/mp4' }, ctx.msg, caption);
+  } finally { if (dir) await removeJobDir(dir); }
+}
+
 const cmd = (category, e, run) => { const c = defineCommand(category, { tests: [['', null, () => true]], ...e, fn: () => '' }); c.run = run; c.zenbot = true; return c; };
 
 const tiktok = cmd('Downloaders', { name: 'tiktok', aliases: ['tt', 'ttdl', 'tiktokdl'], description: 'Download a TikTok video without watermark (or its photos / sound)', usage: 'tiktok <TikTok link> [audio]', web: true, tests: [['https://www.tiktok.com/@khaby.lame/video/7137423965982592302', null, () => true]] }, async (ctx) => {
@@ -74,7 +88,11 @@ const tiktok = cmd('Downloaders', { name: 'tiktok', aliases: ['tt', 'ttdl', 'tik
     if (d.images?.length) { for (const [i, img] of d.images.slice(0, 10).entries()) await sendRemote(ctx, img, { kind: 'image', caption: i === 0 ? cap : '', name: 'tiktok-' + i }); return; }
     const v = d.nowatermark || d.watermark; if (!v) throw new Error('no video');
     await sendRemote(ctx, v, { kind: 'video', caption: cap, name: 'tiktok-' + (d.id || 'video') });
-  } catch (e) { logger.warn(`tiktok failed: ${e.message}`); await ctx.reply('❌ Could not download that TikTok right now. Check the link is public and try again.'); }
+  } catch (e) {
+    logger.warn(`tiktok failed: ${e.message}`);
+    if (!wantAudio) { try { await tiktokViaYtDlp(ctx, url, '🎵 TikTok'); return; } catch (e2) { logger.warn(`tiktok yt-dlp fallback failed: ${e2.message}`); } }
+    await ctx.reply('❌ Could not download that TikTok right now. Check the link is public and try again.');
+  }
 });
 
 // Threads sources, in order: the post page itself (threads.com JSON: every video/photo of the post, carousels too),
