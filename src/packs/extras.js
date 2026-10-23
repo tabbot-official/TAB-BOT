@@ -40,7 +40,8 @@ export function makeExtras(economy, now = () => Date.now(), rand = Math.random) 
     async run(ctx) { if ((ctx.args || []).length < minArgs) return ctx.reply(`Usage: /${usage}`); try { await ctx.reply(String(await fn(ctx, ctx.args || [])).slice(0, 3500)); } catch (e) { await ctx.reply(`Could not run ${name}: ${e.message}`); } },
   });
   return [
-    cmd('level', 'Your XP and level', 'level', (ctx) => { const x = xp(ctx).xp || 0, l = levelOf(x), a = xpFor(l), b = xpFor(l + 1); return `Level ${l}\nXP: ${x} (${b - x} to level ${l + 1})\n[${bar((x - a) / (b - a))}]\nEarn XP with /work, /qotd and /buy.`; }),
+    // Tab: renamed from 'level' (taken by .rankcard's alias, which only works in groups); this one works in DMs too.
+    cmd('mylevel', 'Your XP and level', 'mylevel', (ctx) => { const x = xp(ctx).xp || 0, l = levelOf(x), a = xpFor(l), b = xpFor(l + 1); return `Level ${l}\nXP: ${x} (${b - x} to level ${l + 1})\n[${bar((x - a) / (b - a))}]\nEarn XP with /work, /qotd and /buy.`; }),
     cmd('xpboard', 'Top XP players (this bot)', 'xpboard', () => { const out = []; try { const d = JSON.parse(JSON.stringify(bucketAll())); for (const [k, v] of Object.entries(d)) if (k.startsWith('user:xp:') && v.xp) out.push([v.name || 'Player ' + k.slice(-4), v.xp]); } catch { /* none */ } out.sort((a, b) => b[1] - a[1]); return out.length ? out.slice(0, 10).map(([n, x], i) => `${i + 1}. ${n} - ${x} XP (level ${levelOf(x)})`).join('\n') : 'No XP earned yet. Try /work or /qotd.'; }),
     cmd('shop', 'Virtual shop items', 'shop', () => `Virtual shop (coins are not real money)\n${SHOP.map((i) => `${i.id} - ${i.name}: ${i.price} coins. ${i.text}`).join('\n')}\nBuy with /buy <id>`),
     cmd('buy', 'Buy a shop item with virtual coins', 'buy <item id>', (ctx, a) => {
