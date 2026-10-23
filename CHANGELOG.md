@@ -1,5 +1,19 @@
 # Changelog
 
+## Tab audit (2026-10-24)
+- Fixed: .play/.song/.ytmp3 failed after downloading ("does not match its claimed type": YouTube's m4a is detected as video/mp4). Audio in mp4/webm containers is now sent as audio.
+- Fixed: Instagram links of the form instagram.com/<user>/reel/<id>/ were rejected.
+- Fixed: replies written for the "/" prefix ("Answer: /riddle answer", "Use /menu", owner login code) now show the real prefix.
+- Fixed: untouched .env.example placeholders (your-...-key) are treated as unset, so commands say "not set up" instead of "key rejected".
+- Fixed: the temp sweep deleted the sticker font config after 10 minutes and never removed old sticker/gitclone/mediafire/mega folders.
+- New: .soundcloud (yt-dlp). Audio-only items on SoundCloud/Mixcloud-style platforms now go down the audio path. .alive = .ping. Pack .level renamed .mylevel.
+- TikTok: when the tikwm API fails, the video is fetched with yt-dlp instead.
+- Memory (308 MB servers): backup YouTube downloads stream to disk; download RAM gate and default max video height (720p under 512 MB) follow the container limit; tab-start.cjs caps the V8 semi-space (TAB_SEMI_MB, default 8).
+- Keyless AI waits for the provider's "retry after" instead of failing a second question within 30 s.
+- Downloads: a non-link is rejected before it waits in the queue.
+- Removed pack duplicates that never loaded (wordoftheday, flashcard, ipinfo).
+- Dependencies: npm overrides move @vreden/youtube_scraper to axios 1.x and redstar to minimatch 3.1.5 (npm audit: 0 vulnerabilities).
+
 ## Tab fork (2026-10-23), based on Jarvis 2.0.0 by nicholas-pp8
 - Renamed to Tab (package tab-whatsapp-bot, banner, menu, help and replies). Group wake word: "@tab" or "hey tab".
 - Telemetry OFF by default (TELEMETRY=on to opt in). Maintainer suspend/limit directives ignored.
