@@ -54,8 +54,8 @@ async function chatLabel(sock, jid) {
 }
 
 /** Sends one stored entry to a chat. */
-export async function sendEntry(sock, jid, e, caption = '') {
-  const buf = store.readFile(e);
+export async function sendEntry(sock, jid, e, caption = '', bufIn = null) {
+  const buf = bufIn || (e.type === 'text' ? null : store.readFile(e));
   const cap = [caption, e.text && e.type !== 'text' ? e.text : ''].filter(Boolean).join('\n');
   if (e.type === 'text') return sock.sendMessage(jid, { text: [caption, e.text].filter(Boolean).join('\n\n') });
   if (!buf) return sock.sendMessage(jid, { text: `${caption}\n(${e.type} could not be saved: too big or not available)` });

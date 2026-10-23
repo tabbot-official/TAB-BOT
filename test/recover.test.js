@@ -178,9 +178,14 @@ test('setprefix accepts symbols, digits, letters, emoji; persists; escape hatch'
 });
 
 test('recover switches persist across init', () => {
+ // antiedit joined the recover switches after this test was written; cover all five, and an off value too.
  for(const key of ['antidelete','groups','status','vo'])store.setSetting(key,true);
+ store.setSetting('antiedit',false);
  store.init();
- assert.deepEqual(store.getSettings(),{antidelete:true,groups:true,status:true,vo:true});
+ assert.deepEqual(store.getSettings(),{antidelete:true,groups:true,status:true,vo:true,antiedit:false});
+ store.setSetting('antiedit',true);
+ store.init();
+ assert.equal(store.getSettings().antiedit,true);
 });
 
 test('prefix write failure preserves both active and stored prefix',async()=>{const config=(await import('../src/config/config.js')).default;const {default:cmd}=await import('../src/commands/setprefix.js');const file=path.join(config.paths.data,'prefix.json');const old=config.prefix,bytes=fs.readFileSync(file);fs.mkdirSync(file+'.tmp');try{await assert.rejects(cmd.run({args:['#'],reply:async()=>{throw new Error('must not claim success');}}),/store unavailable/);assert.equal(config.prefix,old);assert.deepEqual(fs.readFileSync(file),bytes);}finally{fs.rmdirSync(file+'.tmp');}});

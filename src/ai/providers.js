@@ -12,7 +12,7 @@ export const PROVIDERS = [
     label: 'Gemini',
     type: 'gemini',
     keyEnv: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
-    models: () => (process.env.GEMINI_MODEL ? [process.env.GEMINI_MODEL] : ['gemini-flash-lite-latest', 'gemini-flash-latest', 'gemini-2.5-flash']),
+    models: () => (process.env.GEMINI_MODEL ? [process.env.GEMINI_MODEL] : ['gemini-3.8-flash', 'gemini-flash-lite-latest', 'gemini-flash-latest', 'gemini-2.5-flash']),
   },
   {
     id: 'groq',

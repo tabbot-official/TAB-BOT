@@ -13,6 +13,9 @@ What is different in Tab:
   - Private chat: anyone who messages the bot can use it.
   - Groups: **off by default** (groups can have minors). A group admin, or the bot owner, turns it on for that group with `.xvideos on` and off with `.xvideos off`; once on, any member can use it. The setting is saved per group with the other group settings.
   - The owner can switch it off everywhere with `.platformdisable xvideos` (`.platformenable xvideos` turns it back on).
+- `.threads <link>` reads the post page itself first (every video/photo of the post, carousels too) and falls back to sssthreads; a profile picture is never sent as the result.
+- `.vv` / `.vvn` (owner): reply to a view-once photo/video (`.vv`) or voice note (`.vvn`) and the bot downloads it straight from the replied message, even if it was not saved when it arrived. Works with `viewOnceMessage`, `viewOnceMessageV2`, `viewOnceMessageV2Extension` and the `viewOnce: true` flag.
+- Node 22 or newer (link-preview-js 5 needs it).
 - Environment variable names still start with `JARVIS_` (for example `JARVIS_AUTH_BACKUP_KEY`) so old `.env` files keep working.
 
 The documentation below is the original Jarvis documentation. Wherever it says "Jarvis", read "Tab".

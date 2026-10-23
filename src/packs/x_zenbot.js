@@ -11,6 +11,7 @@ import { fileTypeFromFile } from 'file-type';
 import { streamToFile } from '../commands/xvideos.js';
 import { tiktokDownload } from '../vendor/zenbot/tiktok.js';
 import { threadsDownload } from '../vendor/zenbot/threads.js';
+import { threadsDirect, isAvatarUrl } from '../downloaders/threadsDirect.js';
 import { ytSearch } from '../vendor/zenbot/youtube.js';
 import { githubSearch } from '../vendor/zenbot/github.js';
 import { deezerFind } from '../vendor/zenbot/deezersearch.js';
@@ -76,20 +77,31 @@ const tiktok = cmd('Downloaders', { name: 'tiktok', aliases: ['tt', 'ttdl', 'tik
   } catch (e) { logger.warn(`tiktok failed: ${e.message}`); await ctx.reply('❌ Could not download that TikTok right now. Check the link is public and try again.'); }
 });
 
-const threads = cmd('Downloaders', { name: 'threads', aliases: ['threadsdl'], description: 'Download a video or photo from a public Threads post', usage: 'threads <Threads post link>', web: true }, async (ctx) => {
+// Threads sources, in order: the post page itself (threads.com JSON: every video/photo of the post, carousels too),
+// then sssthreads. sssthreads sometimes answers with a 150px profile picture instead of the media: never send an avatar.
+export async function threadsMedia(url, { direct = threadsDirect, sss = threadsDownload, pause = 2500 } = {}) {
+  const errors = [];
+  try { const items = (await direct(url)).filter((x) => x?.url && !isAvatarUrl(x.url)); if (items.length) return { items, via: 'threads.com' }; } catch (e) { errors.push('threads.com: ' + e.message); }
+  for (let i = 0; i < 3; i++) {
+    if (i && pause) await new Promise((r) => setTimeout(r, pause));
+    try { const r = await sss(url); if (r?.url && !isAvatarUrl(r.url)) return { items: [{ type: r.type === 'image' ? 'image' : 'video', url: r.url }], via: 'sssthreads' }; errors.push('sssthreads: avatar only'); }
+    catch (e) { errors.push('sssthreads: ' + e.message); }
+  }
+  throw new Error(errors.slice(-2).join('; ') || 'no media');
+}
+
+const threads = cmd('Downloaders', { name: 'threads', aliases: ['threadsdl'], description: 'Download the videos or photos of a public Threads post', usage: 'threads <Threads post link>', web: true }, async (ctx) => {
   const url = linkArg(ctx.args, /(^|\.)threads\.(net|com)$/i);
   if (!url) return ctx.reply(`Usage: ${P()}threads <Threads post link>`);
   try {
     await ctx.reply('⏳ Downloading from Threads...');
-    // The source sometimes answers with a 150px profile picture instead of the post media: retry, never send an avatar.
-    let d = null;
-    for (let i = 0; i < 3 && !d; i++) {
-      if (i) await new Promise((r) => setTimeout(r, 2500));
-      const r = await threadsDownload(url).catch((e) => { if (i === 2) throw e; return null; });
-      if (r?.url && !/s150x150|t51\.\d+-19\//.test(r.url)) d = r;
+    const { items, via } = await threadsMedia(url);
+    let sent = 0;
+    for (const [i, it] of items.slice(0, 10).entries()) {
+      try { await sendRemote(ctx, it.url, { kind: it.type === 'image' ? 'image' : 'video', caption: sent ? '' : '✅ Threads', name: 'threads-' + i }); sent++; }
+      catch (e) { logger.warn(`threads item ${i} (${via}) failed: ${e.message}`); }
     }
-    if (!d) throw new Error('only an avatar came back');
-    await sendRemote(ctx, d.url, { kind: d.type === 'image' ? 'image' : 'video', caption: '✅ Threads', name: 'threads' });
+    if (!sent) throw new Error('no item could be sent');
   } catch (e) { logger.warn(`threads failed: ${e.message}`); await ctx.reply('❌ Could not download that Threads post. Make sure it is public and has a video or photo.'); }
 });
 
