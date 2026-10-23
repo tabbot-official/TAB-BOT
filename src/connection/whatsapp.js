@@ -33,6 +33,9 @@ let stopping = false;
 let reconnectAttempts = 0;
 let pairingAttempts = 0;
 let pairingNumber = config.pairingNumber || config.ownerNumber || '';
+// Tab: QR-only linking. PAIRING_METHOD=qr (or no number and no interactive terminal, e.g. a hosting panel)
+// skips the phone-number prompt and the pairing code; the bot only writes pairing-qr.png to scan.
+const qrOnly = () => String(process.env.PAIRING_METHOD || '').trim().toLowerCase() === 'qr' || (!pairingNumber && !process.stdin.isTTY);
 
 function ask(question) {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -111,7 +114,9 @@ export async function startWhatsApp() {
   const { state, saveCreds } = await useMultiFileAuthState(config.paths.auth);
   // Ask for the number BEFORE opening the socket, so the pairing code is fresh when it appears.
   if (!pairingNumber && !state.creds.registered && config.ecosystem.ticket && config.ecosystem.number) pairingNumber = config.ecosystem.number;
-  if (!state.creds.registered && !pairingNumber) {
+  if (!state.creds.registered && !pairingNumber && qrOnly()) {
+    logger.info('QR linking: waiting for the QR code (saved as pairing-qr.png in the data folder). Scan it in WhatsApp > Linked devices > Link a device.');
+  } else if (!state.creds.registered && !pairingNumber) {
     try {
       pairingNumber = await promptNumber();
     } catch (err) {
@@ -174,7 +179,8 @@ export async function startWhatsApp() {
     version,
     logger: auditPino,
     auth: { creds: state.creds, keys: makeCacheableSignalKeyStore(state.keys, silent) },
-    browser: Browsers.ubuntu('Chrome'),
+    // Tab: macOS/Chrome is the browser identity Baileys documents for phone-number pairing; WA_BROWSER=ubuntu restores the old one.
+    browser: String(process.env.WA_BROWSER || '').toLowerCase() === 'ubuntu' ? Browsers.ubuntu('Chrome') : Browsers.macOS('Chrome'),
     markOnlineOnConnect: false,
     // Each login QR stays valid ~60s (Baileys default is 60s for the first, 20s after).
     qrTimeout: 60_000,
@@ -243,7 +249,8 @@ export async function startWhatsApp() {
       // (WhatsApp refreshes it about every 20s) and also request a phone pairing code as fallback.
       if (qr && !s.authState.creds.registered) {
         savePairingQr(qr, config.paths.data, (m) => logger.warn(m)).catch((e) => logger.warn('Pairing QR save failed: ' + (e?.message || e)));
-        if (!pairingRequested) {
+        if (!pairingNumber && qrOnly()) logger.info('New QR code ready: pairing-qr.png in the data folder (valid about 60 s).');
+        if (!pairingRequested && !(qrOnly() && !pairingNumber)) {
           pairingRequested = true;
           await sleep(1500);
           await requestPairing(s);
