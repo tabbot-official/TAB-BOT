@@ -15,6 +15,7 @@ export const DEFAULTS = {
   antisticker: false, // delete stickers from non-admins
   antipromote: false, // demote anyone promoted (owner exempt)
   antimedia: false, // delete all media from non-admins
+  xvideos: false, // 18+ .xvideos command; a group admin turns it on with .xvideos on
   welcomeMsg: 'Welcome {user} to {group}! 👋 Type /rules to see the group rules.',
   goodbyeMsg: 'Goodbye {user} 👋',
   rules: '',

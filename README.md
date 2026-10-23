@@ -9,7 +9,10 @@ What is different in Tab:
 - The original Jarvis pairing portal (`https://3-110-115-23.sslip.io/portal`) is restored; a portal code/ticket is needed before pairing data is sent there.
 - Hourly auto-update from Jarvis remains OFF to protect Tab branding and added commands (set `UPDATE_REPO` only to a repository you control).
 - No auto-update from the Jarvis GitHub repo (it would overwrite Tab). `UPDATE_REPO=owner/repo` only for a repo you control.
-- Extra downloader: `/xvideos <link>` (yt-dlp). Owner can switch it off with `/platformdisable xvideos`.
+- 18+ command `.xvideos`: `.xvideos <words>` searches XVideos, XNXX, Pornhub and xHamster at once, `.xvideos <number>` downloads a result from your last search, `.xvideos <link>` downloads a video (up to 16 MB as video, larger as a file, 100 MB max).
+  - Private chat: anyone who messages the bot can use it.
+  - Groups: **off by default** (groups can have minors). A group admin, or the bot owner, turns it on for that group with `.xvideos on` and off with `.xvideos off`; once on, any member can use it. The setting is saved per group with the other group settings.
+  - The owner can switch it off everywhere with `.platformdisable xvideos` (`.platformenable xvideos` turns it back on).
 - Environment variable names still start with `JARVIS_` (for example `JARVIS_AUTH_BACKUP_KEY`) so old `.env` files keep working.
 
 The documentation below is the original Jarvis documentation. Wherever it says "Jarvis", read "Tab".

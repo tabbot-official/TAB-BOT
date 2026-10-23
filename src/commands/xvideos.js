@@ -2,7 +2,9 @@
 //   .xvideos <words>   search all four sites at once, one numbered list
 //   .xvideos <number>  download a result from your last search
 //   .xvideos <link>    download a video from any of the four sites
-// Owner only, private chat only. ".platformdisable xvideos" switches it off.
+// Private chats: anyone can use it. Groups: OFF by default; a group admin (or the bot owner)
+// turns it on for that group with ".xvideos on" and off with ".xvideos off" (stored per group,
+// key "xvideos" in the group settings store). ".platformdisable xvideos" is the owner's global off switch.
 // Search and link extraction: src/vendor/zenbot-nsfw (AxelDev09, MIT). Fallback: the bot's yt-dlp.
 // Low-memory: every video is streamed to a temp job folder on disk and removed afterwards.
 import fs from 'node:fs';
@@ -17,6 +19,8 @@ import logger from '../utils/logger.js';
 import { downloadQueue, runYtDlp, DownloadError } from '../utils/downloader.js';
 import { createJobDir, removeJobDir, freeDiskBytes, safeFileName } from '../utils/fileManager.js';
 import { isDisabled } from '../downloaders/platforms.js';
+import { store as groupStore, settings as groupSettings } from '../groups/store.js';
+import { permitted } from '../permissions/index.js';
 import { xvideosSearch } from '../vendor/zenbot-nsfw/xvideossearch.js';
 import { xvideosDownload } from '../vendor/zenbot-nsfw/xvideosdl.js';
 import { xnxxSearch } from '../vendor/zenbot-nsfw/xnxxsearch.js';
@@ -60,7 +64,7 @@ export const toSeconds = (d) => { const s = isoDur(d); if (/^\d+min$/.test(s)) r
 // ---------- last search per user (for ".xvideos 3") ----------
 const lastSearch = new Map();
 const keyOf = (ctx) => String(ctx.sender || ctx.jid || 'owner');
-function remember(ctx, items) { lastSearch.set(keyOf(ctx), { items, at: Date.now() }); if (lastSearch.size > 50) lastSearch.delete(lastSearch.keys().next().value); }
+function remember(ctx, items) { lastSearch.set(keyOf(ctx), { items, at: Date.now() }); if (lastSearch.size > 300) lastSearch.delete(lastSearch.keys().next().value); }
 function recall(ctx, n) { const e = lastSearch.get(keyOf(ctx)); if (!e || Date.now() - e.at > 6 * 3600_000) return null; return e.items[n - 1] || null; }
 
 // ---------- search ----------
@@ -208,20 +212,34 @@ async function runDownload(ctx, site, url) {
   catch (e) { return ctx.reply(e?.userMessage || e?.message || 'Download queue error.'); }
 }
 
+export const groupEnabled = (gid) => groupSettings(gid).xvideos === true;
+
+async function toggle(ctx, on, p) {
+  if (!ctx.isGroup) return ctx.reply(`🔞 ${p}xvideos on/off is for groups. In a private chat it already works: ${p}xvideos <words>`);
+  if (!await permitted(ctx, { requiredLevel: 'admin' })) return ctx.reply(`Only a group admin can turn ${p}xvideos ${on ? 'on' : 'off'} here.`);
+  const st = groupStore();
+  if (!st) return ctx.reply('Group storage is not ready yet. Try again in a moment.');
+  st.setSetting(ctx.jid, 'xvideos', on);
+  return ctx.reply(on
+    ? `🔞 ${p}xvideos is now ON in this group. Any member can use it. An admin can turn it off with ${p}xvideos off.`
+    : `${p}xvideos is now OFF in this group.`);
+}
+
 export default {
   name: 'xvideos',
   aliases: ['xv'],
   category: 'Downloaders',
-  description: '18+: search XVideos, XNXX, Pornhub and xHamster at once, or download a video (owner, private chat only)',
-  usage: 'xvideos <words | number | link>',
-  ownerOnly: true,
+  description: '18+: search XVideos, XNXX, Pornhub and xHamster at once, or download a video. Anyone in private chat; in groups only after an admin sends .xvideos on',
+  usage: 'xvideos <words | number | link> | xvideos on|off (group admins)',
   platform: 'xvideos',
   async run(ctx) {
     const p = config.prefix || '.';
-    if (ctx.isGroup) return ctx.reply(`🔞 ${p}xvideos works only in a private chat with the bot.`);
-    if (isDisabled('xvideos')) return ctx.reply(`🔞 ${p}xvideos is switched off. Use ${p}platformenable xvideos to turn it back on.`);
     const arg = (ctx.args || []).join(' ').trim();
-    if (!arg) return ctx.reply(`🔞 Usage:\n${p}xvideos <words> - search XVideos, XNXX, Pornhub, xHamster\n${p}xvideos <number> - download from your last search\n${p}xvideos <link> - download a video`);
+    const sw = arg.toLowerCase();
+    if (sw === 'on' || sw === 'off') return toggle(ctx, sw === 'on', p);
+    if (isDisabled('xvideos')) return ctx.reply(`🔞 ${p}xvideos is switched off by the bot owner.${ctx.isOwner ? ` Use ${p}platformenable xvideos to turn it back on.` : ''}`);
+    if (ctx.isGroup && !groupEnabled(ctx.jid)) return ctx.reply(`🔞 ${p}xvideos is off in this group. A group admin can enable it with ${p}xvideos on`);
+    if (!arg) return ctx.reply(`🔞 Usage:\n${p}xvideos <words> - search XVideos, XNXX, Pornhub, xHamster\n${p}xvideos <number> - download from your last search\n${p}xvideos <link> - download a video${ctx.isGroup ? `\n${p}xvideos off - admins: turn it off in this group` : ''}`);
     if (/^\d{1,2}$/.test(arg)) {
       const it = recall(ctx, Number(arg));
       if (!it) return ctx.reply(`No result #${arg}. Search first: ${p}xvideos <words>`);
