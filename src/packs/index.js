@@ -19,6 +19,7 @@ import convert from './convert.js';
 import encode from './encode.js';
 import text from './text.js';
 import xplatforms from './x_platforms.js';
+import xzenbot from './x_zenbot.js';
 // Command packs: each pack file default-exports an array of command objects built with _kit.js.
-export const packs = [...text, ...encode, ...convert, ...math, ...datetime, ...health, ...finance, ...dev, ...fun, ...games, ...facts, ...pranks, ...study, ...work, ...daily, ...productivity, ...group, ...utilities, ...web, ...owner, ...upload, ...social2, ...extras, ...image, ...xplatforms];
+export const packs = [...text, ...encode, ...convert, ...math, ...datetime, ...health, ...finance, ...dev, ...fun, ...games, ...facts, ...pranks, ...study, ...work, ...daily, ...productivity, ...group, ...utilities, ...web, ...owner, ...upload, ...social2, ...extras, ...image, ...xplatforms, ...xzenbot];
 export default packs;
