@@ -1308,7 +1308,7 @@ async function runSafeMode(ctx, goal) {
   const answerStep = plan.find((s) => s.answer);
   if (answerStep) return editOrReply(ctx, live, answerStep.answer);
   const names = plan.map((s) => s.cmd + (s.args ? ' ' + s.args : ''));
-  if (live?.key) { try { await ctx.sock.sendMessage(ctx.jid, { text: '🤖 Plan (' + plan.length + ' steps):\n' + names.map((n, i) => (i + 1) + '. /' + n).join('\n') + '\n\nRunning...', edit: live.key }); } catch {} }
+  if (live?.key) { try { await ctx.sock.sendMessage(ctx.jid, { text: '🤖 Plan (' + plan.length + ' steps):\n' + names.map((n, i) => (i + 1) + '. ' + config.prefix + n).join('\n') + '\n\nRunning...', edit: live.key }); } catch {} }
   for (const step of plan) {
     if (step.answer) continue;
     const cmd = registry.get(step.cmd);

@@ -25,7 +25,7 @@
   "error_input": "Check the input or cooldown. Use /help for the correct format.",
   "error_internal": "This command could not finish. Contact an administrator with this reference.",
   "menu_footer": "Use {prefix}help for a quick guide",
-  "help_intro": "Commands start with {prefix}.\n{prefix}menu lists commands.\n{prefix}help command shows usage.\nDownloads have size and time limits.",
+  "help_intro": "Commands start with \"{prefix}\"\n{prefix}menu lists commands.\n{prefix}help command shows usage.\nDownloads have size and time limits.",
   "desc_8ball": "Playful random answer, not advice",
   "cat_Games": "Games",
   "desc_achievements": "Virtual economy achievements",

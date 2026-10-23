@@ -5,6 +5,7 @@ import config from '../config/config.js';
 import logger from '../utils/logger.js';
 import { jidToNumber } from '../utils/helpers.js';
 import { handleCommand, parseCommand, registry } from './commandHandler.js';
+import { localizePrefix } from '../utils/prefixText.js';
 import { handleStatus } from './statusHandler.js';
 import { cacheMessage } from '../utils/msgCache.js';
 import { observe } from '../recover/index.js';
@@ -28,12 +29,15 @@ const botSent = new Set(); // ids of messages this bot sent itself
 const MAX_SENT = 500;
 
 /** Wraps sock.sendMessage so the bot can recognise (and ignore) its own replies. */
+// Tab: replies written for the "/" prefix ("Use /menu") are shown with the live prefix; see utils/prefixText.js.
+const isCmdName = (n) => n !== 'setprefix' && !!registry.get(n);
 export function trackOutgoing(sock) {
   try { attachGroups(sock); } catch (err) { logger.error('Group module failed to attach:', err); }
   const original = sock.sendMessage.bind(sock);
   sock.sendMessage = async (...args) => {
     const noCache=!!args[2]?.jarvisNoCache;
     if(noCache){args[2]={...args[2]};delete args[2].jarvisNoCache;}
+    const c=args[1];if(c&&typeof c==='object'&&(typeof c.text==='string'||typeof c.caption==='string')){const fix=(t)=>localizePrefix(t,config.prefix,isCmdName);args[1]={...c,...(typeof c.text==='string'?{text:fix(c.text)}:{}),...(typeof c.caption==='string'?{caption:fix(c.caption)}:{})};}
     const res = await original(...args);
     if(!noCache)cacheMessage(res);
     if (res?.key?.id) {
