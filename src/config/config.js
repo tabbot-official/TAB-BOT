@@ -1,7 +1,9 @@
 import { mkdirSync } from 'node:fs';
 import 'dotenv/config';
+import './envPlaceholders.js';
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import settings from './settings.js';
 
@@ -18,6 +20,14 @@ const num = (k, d, min = 0) => {
 };
 const dir = (k, d) => path.resolve(root, str(k, d) || d);
 const digits = (v) => v.replace(/\D/g, '');
+
+// Tab: memory limit of this container (cgroup v2/v1) in MB, or the machine's RAM. Small panel servers (KataBump: 308 MB)
+// get smaller defaults so a 1080p video re-encode (ffmpeg ~124 MB) plus the bot (~200 MB) does not exceed the limit.
+function containerMemoryMB() {
+  let m = 0; try { m = os.totalmem() || 0; } catch { /* ignore */ }
+  for (const p of ['/sys/fs/cgroup/memory.max', '/sys/fs/cgroup/memory/memory.limit_in_bytes']) { try { const n = Number(fs.readFileSync(p, 'utf8').trim()); if (n > 0 && (!m || n < m)) m = n; } catch { /* not limited */ } }
+  return m ? Math.floor(m / 1048576) : Infinity;
+}
 
 function findBin(name, envKey, extra = []) {
   const explicit = str(envKey);
@@ -58,7 +68,7 @@ const config = {
     maxFileBytes: num('MAX_FILE_SIZE_MB', 100, 1) * 1024 * 1024,
     maxDownloadSeconds: num('MAX_DOWNLOAD_TIME', 300, 10),
     maxInlineVideoBytes: num('MAX_INLINE_VIDEO_MB', 64, 1) * 1024 * 1024,
-    maxVideoHeight: num('MAX_VIDEO_HEIGHT', 1080, 144),
+    maxVideoHeight: num('MAX_VIDEO_HEIGHT', containerMemoryMB() < 512 ? 720 : 1080, 144), // Tab: 1080p re-encode peaks ~124 MB in ffmpeg, 720p ~90 MB
     concurrent: Math.max(1, Math.floor(num('MAX_CONCURRENT_DOWNLOADS', 1, 1))),
     maxQueue: Math.floor(num('MAX_QUEUE_LENGTH', 10, 1)),
     maxJobsPerUser: Math.floor(num('MAX_JOBS_PER_USER', 2, 1)),
