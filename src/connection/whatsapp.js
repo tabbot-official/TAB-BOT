@@ -176,6 +176,8 @@ export async function startWhatsApp() {
     auth: { creds: state.creds, keys: makeCacheableSignalKeyStore(state.keys, silent) },
     browser: Browsers.ubuntu('Chrome'),
     markOnlineOnConnect: false,
+    // Each login QR stays valid ~60s (Baileys default is 60s for the first, 20s after).
+    qrTimeout: 60_000,
     syncFullHistory: false,
     generateHighQualityLinkPreview: false,
     // Lets WhatsApp re-send messages we could not decrypt the first time (needed for full media delivery).
