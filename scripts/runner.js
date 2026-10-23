@@ -11,4 +11,9 @@ if(journal){
   const t=setTimeout(()=>{console.error('[Tab] Update health timeout. Restarting for rollback.');process.exit(1);},90000);t.unref();globalThis.__jarvisUpdateTimer=t;
  }
 }
+// Tab: WhatsApp pairing fixes go into the installed Baileys before anything imports it; BAILEYS_PKG swaps the library.
+try{const bp=await import('./patch-baileys.js');const pkg=bp.baileysPackageName();
+ if(pkg!=='@whiskeysockets/baileys'){if(bp.resolvePackageDir(pkg)){const {register}=await import('node:module');register('./baileys-alias-hook.js',import.meta.url,{data:{pkg}});console.log('[Tab] WhatsApp library: '+pkg+' (BAILEYS_PKG)');}else console.warn('[Tab] BAILEYS_PKG='+pkg+' is not installed (run: npm install '+pkg+'); using @whiskeysockets/baileys');}
+ bp.applyBaileysPatches({pkg:bp.resolvePackageDir(pkg)?pkg:'@whiskeysockets/baileys',log:(m)=>console.log(m)});
+}catch(e){console.warn('[Tab] Baileys pairing patch skipped: '+(e?.message||e));}
 await import('../src/index.js');
