@@ -36,6 +36,7 @@ const SHORT = {
   ping: 'speed check',
   video: 'video (MP4)',
   play: 'audio',
+  spotify: 'spotify song mp3',
   pinterest: 'image/video',
   ask: 'ask any ai',
   chat: 'ai chat mode', pair: 'pair with the website', shazam: 'find song from clip', summary: 'chat recap', expense: 'split expenses', pollresult: 'poll results', linkcheck: 'scam link checker', trusted: 'automod exempt list', number: 'phone number lookup', readaloud: 'read pdf aloud', dashboard: 'owner web panel', confessions: 'confession box admin', capsule: 'message to future', wrapped: 'group year in review', homework: 'photo to solution', sound: 'sound board', debate: 'AI debate', santa: 'secret santa', akinator: 'AI mind reader', vibe: 'daily vibe check', story: 'story chain', cmd: 'make custom commands', emoji: 'emoji translator', birthday: 'auto birthday wishes', roastlist: 'playlist roast', sid: 'install S-ID', apikey: 'API keys (owner)', autotranslate: 'live translate',

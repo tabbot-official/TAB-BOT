@@ -9,6 +9,7 @@ What is different in Tab:
 - The original Jarvis pairing portal (`https://3-110-115-23.sslip.io/portal`) is restored; a portal code/ticket is needed before pairing data is sent there.
 - Hourly auto-update from Jarvis remains OFF to protect Tab branding and added commands (set `UPDATE_REPO` only to a repository you control).
 - No auto-update from the Jarvis GitHub repo (it would overwrite Tab). `UPDATE_REPO=owner/repo` only for a repo you control.
+- Spotify downloader `.spotify` (alias `.spdl`): `.spotify <spotify track link>` sends the song as an MP3 (192 kbps, 128 kbps for songs over 11 min) with the cover art and title/artist/album tags embedded, plus a caption with title, artist, album and duration. Spotify audio is copy-protected, so the bot reads the track details from Spotify's public pages (no account or API key) and downloads the closest YouTube match by duration, the way spotdl does. `.spotify <song name>` searches YouTube Music. An album or playlist link lists the first 10 songs; `.spotify <number>` downloads one (no bulk downloads). Over 16 MB it is sent as a file. Works for everyone in DMs and groups. Optional: set `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` to show Spotify's info for name searches too.
 - 18+ command `.xvideos`: `.xvideos <words>` searches XVideos, XNXX, Pornhub and xHamster at once, `.xvideos <number>` downloads a result from your last search, `.xvideos <link>` downloads a video (up to 16 MB as video, larger as a file, 100 MB max).
   - Private chat: anyone who messages the bot can use it.
   - Groups: **off by default** (groups can have minors). A group admin, or the bot owner, turns it on for that group with `.xvideos on` and off with `.xvideos off`; once on, any member can use it. The setting is saved per group with the other group settings.
@@ -93,7 +94,7 @@ The documentation below is the original Jarvis documentation. Wherever it says "
 
 ## Features
 
-* **Downloaders**: YouTube audio/video, Pinterest, public Instagram/Facebook/X videos, and F-Droid APK search/info/direct files. See limits and delivery evidence below.
+* **Downloaders**: YouTube audio/video, Spotify songs (MP3 with cover art), Pinterest, public Instagram/Facebook/X videos, and F-Droid APK search/info/direct files. See limits and delivery evidence below.
 * **AI**: `/ask` talks to Gemini, Groq or OpenRouter, whichever keys you set. It tries them in order and falls back on errors.
 * **Text to speech**: `/tts` supports 23 languages, with male/female voices where available using Microsoft Edge voices, with Google Translate as fallback. No API key. Defaults: 500 characters and 5 requests per minute for non-owner users (the owner is exempt). When voice-note conversion fails, it sends plain audio.
 * **Phone info**: `/truecaller +COUNTRYNUMBER yes` (alias `/phoneinfo`) combines separate basic provider reports, owner-only/private chat. Explicit number disclosure required; names/regions are unverified, not live location.
@@ -124,7 +125,7 @@ Current build registers 109 primary commands. Aliases are not counted separately
 | --- | --- | --- |
 | `/errors` | Private error IDs and recurrence counts; no message contents | - |
 
-### Downloaders (10)
+### Downloaders (11)
 
 | Command | What it does | Aliases |
 | --- | --- | --- |
@@ -136,6 +137,7 @@ Current build registers 109 primary commands. Aliases are not counted separately
 | `/instagram` | Download a public instagram video | `/ig`, `/insta` |
 | `/pinterest` | Find a Pinterest pin by name, or download one from a link | `/pin` |
 | `/play` | Download the audio of a YouTube video (M4A) | `/ytaudio`, `/ytmp3`, `/song` |
+| `/spotify` | Download a Spotify song as MP3 with cover art (link, album/playlist or song name) | `/spdl` |
 | `/twitter` | Download a public twitter video | `/x`, `/tweet` |
 | `/video` | Download a YouTube video (MP4) | `/ytvideo`, `/ytmp4`, `/yt` |
 
