@@ -23,6 +23,7 @@ export const PLATFORMS = [
   { name: 'bluesky', label: 'Bluesky', hosts: ['bsky.app'], yt: true, og: true },
   { name: 'mixcloud', label: 'Mixcloud', hosts: ['mixcloud.com'], yt: true, og: false, audio: true },
   { name: 'audiomack', label: 'Audiomack', hosts: ['audiomack.com'], yt: true, og: false, audio: true },
+  { name: 'soundcloud', label: 'SoundCloud', hosts: ['soundcloud.com', 'on.soundcloud.com'], yt: true, og: false, audio: true }, // Tab
   { name: 'bandlab', label: 'BandLab', hosts: ['bandlab.com'], yt: true, og: true, audio: true },
   { name: 'weibo', label: 'Weibo', hosts: ['weibo.com', 'weibo.cn'], yt: true, og: true },
   { name: 'douyin', label: 'Douyin', hosts: ['douyin.com', 'iesdouyin.com'], yt: true, og: true },
@@ -185,10 +186,12 @@ async function fetchToFile(mediaUrl, dir, base, maxBytes) {
   throw new DownloadError('Too many redirects.', { code: 'FAILED' });
 }
 
-async function finishFile(dest, dir, base) {
+async function finishFile(dest, dir, base, wantAudio = false) {
   const type = await fileTypeFromFile(dest); const st = await fs.stat(dest);
   if (!st.size || !type || !['image/', 'video/', 'audio/'].some((p) => type.mime.startsWith(p))) throw new DownloadError('Returned file is empty or not supported media.', { code: 'FAILED' });
   const final = path.join(dir, `${base}.${type.ext}`); await fs.rename(dest, final);
+  // Tab: an audio-only download in an mp4/webm container is detected as video/*; send it as audio.
+  if (wantAudio && type.mime.startsWith('video/')) return { path: final, type: 'audio', mimetype: type.mime === 'video/mp4' ? 'audio/mp4' : type.mime.replace('video/', 'audio/'), size: st.size, ext: type.ext === 'mp4' ? 'm4a' : type.ext };
   return { path: final, type: type.mime.split('/')[0], mimetype: type.mime, size: st.size, ext: type.ext };
 }
 
@@ -200,12 +203,13 @@ async function ytChain(p, clean, dir, kind) {
   if (meta.is_live || meta.live_status === 'is_live') throw new DownloadError('Live streams are not supported.', { code: 'UNSUPPORTED' });
   if (meta.availability && meta.availability !== 'public') throw new DownloadError('Only public content is supported. No login or private access.', { code: 'PRIVATE' });
   if (meta.duration > 1800) throw new DownloadError('This item exceeds the 30-minute limit.', { code: 'TOO_LARGE' });
-  const wantAudio = kind === 'audio' || (p.audio && !meta.height && !meta.vcodec);
+  // Tab: yt-dlp reports audio-only items with vcodec "none" (a truthy string), which sent SoundCloud/Mixcloud down the video path.
+  const wantAudio = kind === 'audio' || (p.audio && !meta.height && (!meta.vcodec || meta.vcodec === 'none'));
   const fmt = wantAudio ? 'bestaudio/best' : `bv*[height<=?${config.limits.maxVideoHeight}][ext=mp4]+ba[ext=m4a]/b[height<=?${config.limits.maxVideoHeight}][ext=mp4]/b[height<=?${config.limits.maxVideoHeight}]/b`;
   await runYtDlp(['-f', fmt, ...(wantAudio ? [] : ['--merge-output-format', 'mp4']), '--max-filesize', String(config.limits.maxFileBytes), '--socket-timeout', '15', '--retries', '1', '--fragment-retries', '1', '--no-playlist', '-o', path.join(dir, 'media.%(ext)s'), clean], { cwd: dir, useCookies: false });
   const names = (await fs.readdir(dir)).filter((n) => /^media\.\w+$/.test(n));
   if (names.length !== 1) throw new DownloadError('The site did not return a supported file.', { code: 'FAILED' });
-  const f = await finishFile(path.join(dir, names[0]), dir, 'out');
+  const f = await finishFile(path.join(dir, names[0]), dir, 'out', wantAudio);
   if (f.size > config.limits.maxFileBytes) throw new DownloadError('TOO_LARGE', { code: 'TOO_LARGE' });
   return { title: safeFileName(meta.title, p.name), files: [{ path: f.path, type: f.type, mimetype: f.mimetype, fileName: safeFileName(meta.title, p.name) + '.' + f.ext, size: f.size }] };
 }
