@@ -330,7 +330,10 @@ export async function askAi(question, { prefer, history = [], allowKeyless = fal
           if (st === 401 || st === 403) { badKey = st === 401; break; }
           const transient = st === 0 || st === 429 || st >= 500 || (p.keyless && st === 402);
           if (!transient || attempt === (p.keyless ? 3 : 2)) break;
-          await sleep(st === 429 ? 2500 : st === 402 ? 9000 : 900);
+          // Tab: the keyless provider answers 402 "1 reply every 30 seconds per IP. Retry after Ns"; wait that long (max 30 s)
+          // instead of a fixed 9 s, so a second question within the window waits its turn rather than failing.
+          const retryAfter = st === 402 ? Number(/retry after (\d{1,3})\s*s/i.exec(String(err.message || ''))?.[1]) : 0;
+          await sleep(st === 429 ? 2500 : st === 402 ? (retryAfter > 0 ? Math.min(30, retryAfter + 1) * 1000 : 9000) : 900);
         }
       }
       if (badKey) break;
