@@ -21,3 +21,5 @@ node_modules/
 /bin/
 .env
 *.log
+
+/node_modules
