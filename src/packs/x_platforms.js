@@ -150,4 +150,5 @@ const social = defineCommand(CAT, { name: 'social', description: 'List social pl
   return `Social platform commands (send /name <public link>)\nWORKING (real download checked): ${g('WORKING')}\nPREVIEW ONLY (cover image, not the video): ${g('PREVIEW')}\nBLOCKED from the bot server (anti-bot), may fail: ${g('BLOCKED')}\nNeeds a fix (extractor or sample failed): ${g('BROKEN')}\nNot checked yet: ${g('UNTESTED')}\nInfo lookups: ${infos.join(', ')}\nAlso: instagram, facebook, twitter, youtube, pinterest, github${off.length ? `\nTemporarily offline: ${off.join(', ')}` : ''}\nPublic content only, no login or paid content.`; }, tests: [['', null, (o) => /^Social platform commands/.test(o) && /WORKING/.test(o)]] });
 
 export const platformInfoNames = E.map((e) => e.name);
-export default [...PLATFORMS.map(dl), ...E.map((e) => defineCommand(CAT, e)), ...ADM.map((e) => defineCommand('Owner', e)), social];
+// 'xvideos' is served by src/commands/xvideos.js (merged 18+ search + download); it stays in PLATFORMS so /platformdisable xvideos and link routing keep working.
+export default [...PLATFORMS.filter((p) => p.name !== 'xvideos').map(dl), ...E.map((e) => defineCommand(CAT, e)), ...ADM.map((e) => defineCommand('Owner', e)), social];
