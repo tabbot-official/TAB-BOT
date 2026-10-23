@@ -6,9 +6,8 @@ import path from 'node:path';
 const SID = /^S-[A-Z0-9]{6}$/;
 export const PROOF_PREFIX = 'JARVIS-PROOF ';
 export const safeUrl = (u) => { try { const x = new URL(String(u || '')); return (x.protocol === 'https:' || (x.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(x.hostname))) ? x.origin + x.pathname.replace(/\/$/, '') : ''; } catch { return ''; } };
-/** Tab: no default portal. Upstream Jarvis defaulted to the maintainer's server (https://3-110-115-23.sslip.io/portal), which receives the
- *  WhatsApp pairing code and can hand back a WhatsApp session. In Tab the portal is used ONLY if you set ecosystem.portalUrl yourself. */
-export const DEFAULT_PORTAL = '';
+/** Original Jarvis pairing portal; only contacted when a portal code/ticket is used. */
+export const DEFAULT_PORTAL = 'https://3-110-115-23.sslip.io/portal';
 const CODE = /^[A-Z0-9]{8}$/;
 export const cleanCode = (c) => { const x = String(c || '').replace(/[^A-Z0-9]/gi, '').toUpperCase(); return CODE.test(x) ? x : ''; };
 const ticketFile = (dir) => path.join(dir, 'ecosystem-ticket.json');
@@ -17,7 +16,6 @@ export function saveTicket(dir, token, number) { fs.mkdirSync(dir, {recursive: t
 /** Trades the short code from the pairing page for a ticket and stores it in data/ (no file editing). Only the code and your number go to the portal. */
 export async function redeemCode({eco, dir, code, number, fetchFn = globalThis.fetch}) {
   const base = safeUrl(eco.portalUrl) || DEFAULT_PORTAL, c = cleanCode(code), n = String(number || '').replace(/\D/g, '');
-  if (!base) return {ok: false, why: 'No pairing portal is configured (Tab does not use the Jarvis maintainer portal). Link with the WhatsApp pairing code instead.'};
   if (!c) return {ok: false, why: 'That code does not look right. It has 8 letters and numbers, like K7QM-4X2P.'};
   if (n.length < 8 || n.length > 15) return {ok: false, why: 'Could not read your number.'};
   try {
@@ -113,7 +111,7 @@ export const commandsToday = (now = new Date()) => (now.toISOString().slice(0, 1
 export function createStatusBeat({eco, dir, env = process.env, fetchFn = globalThis.fetch, version = '', hosting = () => 'unknown', intervalMs = 300000, log = () => {}} = {}) {
   let timer = null, connected = false;
   const off = () => eco.statusBeat === false || String(env.STATUS_BEAT || '').toLowerCase() === 'off';
-  const ready = () => { const base = safeUrl(eco.portalUrl) || DEFAULT_PORTAL, sid = loadSaved(dir), key = loadKey(dir); return !off() && base && connected && sid && key ? {base, sid, key} : null; };
+  const ready = () => { const base = safeUrl(eco.portalUrl) || DEFAULT_PORTAL, sid = loadSaved(dir), key = loadKey(dir); return !off() && connected && sid && key ? {base, sid, key} : null; };
   const beat = async () => {
     const r = ready(); if (!r) return false;
     try {
@@ -140,7 +138,6 @@ export async function claimSession({eco, authDir, dataDir, fetchFn = globalThis.
     if (eco.autoPair === false || !SID.test(eco.sid || '') || String(eco.number || '').replace(/\D/g, '').length < 10) return {ok: false, why: 'not_configured'};
     if (fs.existsSync(path.join(authDir, 'creds.json'))) return {ok: false, why: 'already_logged_in'};
     const base = safeUrl(eco.portalUrl) || DEFAULT_PORTAL;
-    if (!base) return {ok: false, why: 'not_configured'};
     const r = await fetchFn(base + '/pair/handoff', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({number: String(eco.number).replace(/\D/g, ''), sid: eco.sid}), signal: AbortSignal.timeout(20000)});
     const j = await r.json().catch(() => ({}));
     if (!j.success || !j.data?.blob) return {ok: false, why: j.error?.code || 'none_waiting'};

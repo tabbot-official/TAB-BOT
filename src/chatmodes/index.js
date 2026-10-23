@@ -41,10 +41,8 @@ export function addressedToBot(sock, msg, text) {
   const mine = [sock.user?.id, sock.user?.lid].filter(Boolean).map(num);
   if ((ci.mentionedJid || []).some((j) => mine.includes(num(j)))) return true;
   if (ci.participant && mine.includes(num(ci.participant))) return true;
-  const name = String(config.botName || 'tab').toLowerCase().replace(/[^a-z0-9]/g, '');
-  // Short names like "tab" are everyday words (Hindi "tab" = "then"), so they need "@tab" or "hey/hi/ok tab" to count as a call.
-  if (name.length <= 3) return new RegExp('^\\s*(@' + name + '|(hey|hi|ok)\\s+' + name + ')\\b', 'i').test(text);
-  return new RegExp('^\\s*@?(hey\\s+|hi\\s+|ok\\s+)?' + name + '\\b', 'i').test(text);
+  const name = String(config.botName || 'tab').toLowerCase();
+  return new RegExp('^\\s*@?(hey\\s+|hi\\s+|ok\\s+)?' + name.replace(/[^a-z0-9]/g, '') + '\\b', 'i').test(text);
 }
 
 const SAME = 'SAME';

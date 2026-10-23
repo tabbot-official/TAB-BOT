@@ -18,10 +18,10 @@ test('sticky chat answers DMs without a command, groups only when addressed', as
   assert.equal(await cm.maybeChatMode(sock, msg('1@s.whatsapp.net'), 'private', 'hello', { ask }), true);
   assert.equal(await cm.maybeChatMode(sock, msg('2@g.us'), 'group', 'random chatter', { ask }), false);
   assert.equal(await cm.maybeChatMode(sock, msg('2@g.us'), 'group', 'hey tab what is 2+2', { ask }), true);
-  assert.equal(await cm.maybeChatMode(sock, msg('2@g.us'), 'group', 'tab main aaunga', { ask }), false, 'plain Hindi "tab" is not a call');
+  assert.equal(await cm.maybeChatMode(sock, msg('2@g.us'), 'group', 'tab main aaunga', { ask }), true, 'Jarvis-style first-word trigger');
   const mention = msg('2@g.us', { message: { extendedTextMessage: { text: 'x', contextInfo: { mentionedJid: ['9100000000@s.whatsapp.net'] } } } });
   assert.equal(await cm.maybeChatMode(sock, mention, 'group', 'x question', { ask }), true);
-  assert.equal(sent.length, 3);
+  assert.equal(sent.length, 4);
   cm.setChat('1@s.whatsapp.net', false); assert.equal(await cm.maybeChatMode(sock, msg('1@s.whatsapp.net'), 'private', 'hi', { ask }), false);
 });
 test('auto-translate replies only for foreign text', async () => {

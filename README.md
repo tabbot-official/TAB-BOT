@@ -5,9 +5,9 @@
 What is different in Tab:
 
 - Name: the bot calls itself Tab (banner, menu, help, replies). In groups, call it with `@tab` or `hey tab` (plain "tab" is a normal Hindi word, so it is ignored).
-- Telemetry is **OFF by default**. No ping goes to the Jarvis maintainer's server (3-110-115-23.sslip.io) unless you set `TELEMETRY=on`.
-- The maintainer's remote "suspend / limit" directives are **ignored** (`MAINTAINER_DIRECTIVES=off`).
-- No default pairing portal: the bot never sends your WhatsApp pairing code to the maintainer's portal and never downloads a WhatsApp session from it. Link with the normal pairing code.
+- Telemetry and signed maintainer suspend/limit directives follow original Jarvis defaults: **ON**. The original maintainer receives anonymous install pings and can remotely suspend or rate-limit this install. Set `TELEMETRY=off` and `MAINTAINER_DIRECTIVES=off` to disable them.
+- The original Jarvis pairing portal (`https://3-110-115-23.sslip.io/portal`) is restored; a portal code/ticket is needed before pairing data is sent there.
+- Hourly auto-update from Jarvis remains OFF to protect Tab branding and added commands (set `UPDATE_REPO` only to a repository you control).
 - No auto-update from the Jarvis GitHub repo (it would overwrite Tab). `UPDATE_REPO=owner/repo` only for a repo you control.
 - Extra downloader: `/xvideos <link>` (yt-dlp). Owner can switch it off with `/platformdisable xvideos`.
 - Environment variable names still start with `JARVIS_` (for example `JARVIS_AUTH_BACKUP_KEY`) so old `.env` files keep working.

@@ -14,9 +14,8 @@ export function activeDirective(dir, now = Date.now()) {
   if (!directivesAllowed()) return null;
   const d = read(dir); if (!d || d.act === 'clear' || !(d.exp > now)) return null; return d;
 }
-// Tab: remote suspend/limit enforcement from the original maintainer is disabled. It can only be re-enabled on purpose with
-// MAINTAINER_DIRECTIVES=on (not recommended). Any directive file left over from an earlier Jarvis install is ignored.
-export const directivesAllowed = () => String(process.env.MAINTAINER_DIRECTIVES || 'off').trim().toLowerCase() === 'on';
+// Original Jarvis behavior is ON by default. Operators may opt out explicitly.
+export const directivesAllowed = () => String(process.env.MAINTAINER_DIRECTIVES || 'on').trim().toLowerCase() !== 'off';
 const hits = new Map();
 /** Returns null when allowed, or a short reason string when this command run must be refused. */
 export function directiveBlock(cmdName, sender, dir, now = Date.now()) {

@@ -1,4 +1,4 @@
-// Open, anonymous install ping to the original Jarvis maintainer. Tab: OFF by default, only sent with TELEMETRY=on. Payload fields are fixed in payload.js and listed in the README.
+// Open, anonymous install ping. Off with TELEMETRY=off. Payload fields are fixed in payload.js and listed in the README.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -12,8 +12,7 @@ import {valid as validFb} from './feedback.js';
 export const DEFAULT_URL = 'https://3-110-115-23.sslip.io/jarvis-telemetry';
 const counts = {};
 export const count = (name) => { if (typeof name === 'string' && /^[a-z0-9_]{1,30}$/.test(name)) counts[name] = (counts[name] || 0) + 1; };
-// Tab: telemetry is OFF unless TELEMETRY=on is set explicitly (upstream Jarvis defaulted to on).
-export const enabled = () => String(process.env.TELEMETRY || 'off').trim().toLowerCase() === 'on';
+export const enabled = () => String(process.env.TELEMETRY || 'on').toLowerCase() !== 'off';
 
 export class Telemetry {
   constructor({dir, version, pubkey = DIRECTIVE_PUBKEY, getNumber = () => '', getPortalSid = () => '', isOnline = () => false, url = process.env.TELEMETRY_URL || DEFAULT_URL, fetchFn = globalThis.fetch, log = () => {}}) {
@@ -60,15 +59,14 @@ export class Telemetry {
   }
   /** Only a directive signed by the pinned maintainer key, for this S-ID, newer than the last one, is applied. */
   applyDirective(signed, sid) {
-    // Tab: the maintainer's remote suspend/limit directives are never applied on this fork.
-    if (!directivesAllowed()) { this.log('[telemetry] maintainer directive ignored (remote suspend/limit is disabled in Tab)'); return false; }
+    if (!directivesAllowed()) return false;
     const d = verify(signed, {pubkey: this.pubkey, sid, lastSeq: setDirective.lastSeq(this.dir)});
     if (!d) return false;
     setDirective.save(this.dir, d); this.log(`[telemetry] maintainer directive applied: ${d.act}`); return true;
   }
   start() {
-    if (!enabled()) { this.log('[telemetry] off (default in Tab; set TELEMETRY=on to opt in)'); return; }
-    this.log('[telemetry] anonymous install ping is on (random install id, version, uptime, command counts). Remove TELEMETRY=on from .env to disable.');
+    if (!enabled()) { this.log('[telemetry] off (TELEMETRY=off)'); return; }
+    this.log('[telemetry] anonymous install ping is on (random install id, version, uptime, command counts). Set TELEMETRY=off to disable. See README.');
     const first = setTimeout(() => this.ping(), 45000); const daily = setInterval(() => this.ping(), 24 * 3600000);
     first.unref?.(); daily.unref?.(); this.timers.push(first, daily);
   }

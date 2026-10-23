@@ -114,7 +114,7 @@ export async function startWhatsApp() {
   const { state, saveCreds } = await useMultiFileAuthState(config.paths.auth);
   // Ask for the number BEFORE opening the socket, so the pairing code is fresh when it appears.
   if (!pairingNumber && !state.creds.registered && config.ecosystem.ticket && config.ecosystem.number) pairingNumber = config.ecosystem.number;
-  if (!state.creds.registered && !pairingNumber && qrOnly()) {
+  if (!state.creds.registered && qrOnly()) {
     logger.info('QR linking: waiting for the QR code (saved as pairing-qr.png in the data folder). Scan it in WhatsApp > Linked devices > Link a device.');
   } else if (!state.creds.registered && !pairingNumber) {
     try {
@@ -125,7 +125,7 @@ export async function startWhatsApp() {
     }
   }
   // Paste-free pairing: a code from the pairing page (env PORTAL_CODE or typed here) is traded for a ticket and stored in data/.
-  if (!state.creds.registered && !config.ecosystem.ticket && !loadSaved(config.paths.data) && (config.ecosystem.portalUrl || process.env.PORTAL_CODE)) {
+  if (!state.creds.registered && !config.ecosystem.ticket && !loadSaved(config.paths.data)) {
     // Auto-skip after 20s so an unattended restart is never stuck on this prompt.
     const typed = process.env.PORTAL_CODE || (process.stdin.isTTY ? await Promise.race([ask('Portal code from the pairing page (press Enter to skip): '), new Promise((r) => setTimeout(() => r(''), 20_000))]) : '');
     if (cleanCode(typed)) { const r = await redeemCode({ eco: config.ecosystem, dir: config.paths.data, code: typed, number: pairingNumber }); logger[r.ok ? 'info' : 'warn'](r.ok ? 'Portal code accepted.' : 'Portal code not accepted: ' + r.why); }
@@ -249,8 +249,8 @@ export async function startWhatsApp() {
       // (WhatsApp refreshes it about every 20s) and also request a phone pairing code as fallback.
       if (qr && !s.authState.creds.registered) {
         savePairingQr(qr, config.paths.data, (m) => logger.warn(m)).catch((e) => logger.warn('Pairing QR save failed: ' + (e?.message || e)));
-        if (!pairingNumber && qrOnly()) logger.info('New QR code ready: pairing-qr.png in the data folder (valid about 60 s).');
-        if (!pairingRequested && !(qrOnly() && !pairingNumber)) {
+        if (qrOnly()) logger.info('New QR code ready: pairing-qr.png in the data folder (valid about 60 s).');
+        if (!pairingRequested && !qrOnly()) {
           pairingRequested = true;
           await sleep(1500);
           await requestPairing(s);

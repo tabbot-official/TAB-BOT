@@ -34,7 +34,7 @@ test('collector: feedback needs a known install, strict keys, 5 a day, 200 kept'
 
 test('client: sends cleaned text, per-sender wait, daily cap, respects TELEMETRY=off', async () => {
   const sent = []; const f = async (u, o) => { sent.push(JSON.parse(o.body)); return {ok: true, status: 200}; };
-  process.env.TELEMETRY = 'on'; // Tab: telemetry is opt-in
+  process.env.TELEMETRY = 'on'; // Jarvis: telemetry defaults on
   const t = new Telemetry({dir: tmp(), version: '1', fetchFn: f});
   assert.deepEqual(await t.sendFeedback('please add dark mode, my number 919876543210', 'u1'), {ok: true});
   assert.ok(!JSON.stringify(sent[0]).includes('919876543210')); assert.deepEqual(Object.keys(sent[0]).sort(), ['id', 'k', 't', 'v']);
@@ -53,9 +53,9 @@ test('command: short text refused; menu lists /feedback first', async () => {
   assert.ok(text.split('\n').slice(0, 5).some((l) => l.includes('📣')), 'within the first lines');
 });
 
-test('Tab default: no TELEMETRY in env means feedback and ping send nothing', async () => {
+test('Jarvis default: no TELEMETRY in env enables feedback and ping', async () => {
   const prev = process.env.TELEMETRY; delete process.env.TELEMETRY; let calls = 0;
   try { const t = new Telemetry({dir: tmp(), version: '1', fetchFn: async () => { calls++; return {ok: true, status: 200, json: async () => ({})}; }});
-    assert.equal((await t.sendFeedback('hello there friend', 'z')).why, 'off'); assert.equal(await t.ping(), null); assert.equal(calls, 0);
+    assert.equal((await t.sendFeedback('hello there friend', 'z')).ok, true); await t.ping(); assert.ok(calls >= 2);
   } finally { if (prev === undefined) delete process.env.TELEMETRY; else process.env.TELEMETRY = prev; }
 });

@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 process.env.OWNER_NUMBER ||= '919000000001';
-process.env.MAINTAINER_DIRECTIVES = 'on'; // Tab: these tests cover the opt-in path; the default (off) is tested at the end
+process.env.MAINTAINER_DIRECTIVES = 'on'; // Original Jarvis default: on; explicit off is tested at the end
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dir-'));
 process.env.DATA_FOLDER = dataDir;
 const {loadOrCreateKey, sign, verify} = await import('../src/telemetry/directive.js');
@@ -88,14 +88,16 @@ test('dispatch: a suspended install refuses a real command through handleCommand
   } finally { fs.rmSync(path.join(config.paths.data, 'telemetry-directive.json'), {force: true}); }
 });
 
-test('Tab default: maintainer directives are ignored unless MAINTAINER_DIRECTIVES=on', async () => {
+test('Jarvis default: maintainer directives apply; explicit off disables them', async () => {
   const {directiveBlock, activeDirective, setDirective} = await import('../src/telemetry/enforce.js');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dir-off-'));
   setDirective.save(dir, {act: 'suspend', exp: Date.now() + 864e5, seq: 99});
   const prev = process.env.MAINTAINER_DIRECTIVES; delete process.env.MAINTAINER_DIRECTIVES;
   try {
+    assert.equal(activeDirective(dir)?.act, 'suspend'); assert.equal(directiveBlock('ping', 'u', dir), 'suspended');
+    process.env.MAINTAINER_DIRECTIVES = 'off';
     assert.equal(activeDirective(dir), null); assert.equal(directiveBlock('ping', 'u', dir), null);
     const t = new Telemetry({dir, version: '1', fetchFn: async () => ({ok: true, json: async () => ({})})});
     assert.equal(t.applyDirective('anything', 'S-ABC234'), false);
-  } finally { process.env.MAINTAINER_DIRECTIVES = prev; }
+  } finally { if (prev === undefined) delete process.env.MAINTAINER_DIRECTIVES; else process.env.MAINTAINER_DIRECTIVES = prev; }
 });
