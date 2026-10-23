@@ -172,7 +172,7 @@ async function getConfig() {
     timeout: 15000,
   })
   const html          = res.data
-  const key           = html.match(/"INNERTUBE_API_KEY"\s*:\s*"([^"]+)"/)?.[1] || 'AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM394'
+  const key           = html.match(/"INNERTUBE_API_KEY"\s*:\s*"([^"]+)"/)?.[1] || (process.env.ZENBOT_YT_KEY || '')
   const visitorData   = html.match(/"visitorData"\s*:\s*"([^"]+)"/)?.[1] || ''
   const clientVersion = html.match(/"clientVersion"\s*:\s*"([^"]+)"/)?.[1] || '2.20240101.00.00'
   _config = { key, visitorData, clientVersion }
