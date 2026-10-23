@@ -1,0 +1,287 @@
+{
+  "schema_keys": 228,
+  "runtime_files": 70,
+  "complete_non_english": 69,
+  "locales": {
+    "afr": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "ara": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "aze": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "bel": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "ben": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "bos": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "bul": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "cat": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "ceb": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "ces": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "cym": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "dan": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "deu": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "ell": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "eng": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "est": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "fas": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "fil": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "fin": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "fra": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "gle": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "glg": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "guj": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "heb": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "hin": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "hrv": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "hun": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "hye": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "ind": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "isl": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "ita": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "jav": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "jpn": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "kan": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "kat": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "kaz": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "kir": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "kor": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "lav": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "lit": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "mal": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "mar": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "mkd": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "mon": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "msa": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "nep": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "nld": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "nob": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "pan": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "pol": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "por": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "ron": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "rus": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "slk": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "slv": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "spa": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "sqi": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "srp": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "swa": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "swe": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "tam": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "tel": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "tha": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "tuk": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "tur": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "ukr": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "urd": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "uzb": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "vie": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    },
+    "zho": {
+      "authored_keys": 228,
+      "complete_runtime_schema": true
+    }
+  }
+}

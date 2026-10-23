@@ -1,0 +1,2 @@
+import {outcome,board} from '../engine.js';
+export default {name:'ttt',players:2,create:()=>({board:Array(9).fill(null),turn:0}),render:s=>board(s.board)+`\nPlayer ${s.turn+1} turn. Move1-9.`,move(s,input,player){if(player!==s.turn)throw new Error('Not your turn.');if(!/^[1-9]$/.test(input))throw new Error('Choose square1-9.');const n=Number(input)-1;if(s.board[n])throw new Error('Square occupied.');s.board[n]=player?'O':'X';const r=outcome(s.board);if(!r)s.turn=1-s.turn;return{done:!!r,winners:r&&r!=='draw'?[r==='X'?0:1]:[],draw:r==='draw'};}};

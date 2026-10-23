@@ -1,0 +1,6 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {recall,remember,forget,withContext} from '../src/ai/chatMemory.js';
+import {parseStickerArgs} from '../src/commands/sticker.js';
+test('ask memory keeps recent turns, expires, resets',()=>{const t0=1e12;remember('c','u','my name is Rohan','Nice to meet you Rohan',t0);assert.equal(recall('c','u',t0+1000).length,1);assert.match(withContext(recall('c','u',t0+1000),'what is my name?'),/my name is Rohan[\s\S]*what is my name\?/);assert.equal(recall('c','u',t0+61*60*1000).length,0);remember('c','u','a','b',t0);forget('c','u');assert.equal(recall('c','u',t0).length,0);for(let i=0;i<12;i++)remember('c2','u','q'+i,'a',t0);assert.equal(recall('c2','u',t0).length,10);assert.equal(withContext([], 'hi'),'hi');});
+test('memory is per chat and user',()=>{remember('g1','a','x','y',5);assert.equal(recall('g1','b',5).length,0);assert.equal(recall('g2','a',5).length,0);});
+test('sticker args',()=>{assert.deepEqual(parseStickerArgs([]),{crop:false,pack:'Tab',author:'Rohan'});assert.deepEqual(parseStickerArgs(['crop','My','Pack','|','Me']),{crop:true,pack:'My Pack',author:'Me'});assert.equal(parseStickerArgs(['--crop']).crop,true);});

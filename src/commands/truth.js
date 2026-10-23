@@ -1,0 +1,2 @@
+import {parseCategory,draw,format,HELP} from '../games/truthdare/index.js';
+export default {name:'truth',aliases:[],category:'Games',description:'Random truth prompt with optional category',usage:'truth [funny|sad|romantic|love|brother|sister|irl]',async run(ctx){const r=parseCategory(ctx.args[0]);if(r.error)return ctx.reply('Unknown category. '+HELP);return ctx.reply(format('truth',draw('truth',r.cat,ctx.jid)));}};

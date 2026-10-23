@@ -1,0 +1,2 @@
+# Python panel bootstrap uses only the Python standard library. No pip packages.
+# The WhatsApp engine and its dependencies are Node.js, installed with npm ci.

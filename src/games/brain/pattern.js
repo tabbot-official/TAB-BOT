@@ -1,0 +1,1 @@
+import {simple,pick,rand,question} from './util.js';export default simple('pattern',level=>{if(level==='hard'){const a=rand(1,5);return question(`${a}, ${a*2}, ${a*4}, ${a*8}, ?`,String(a*16));}if(level==='medium')return question('A, C, E, G, ?', 'i');const [a,b]=pick([['A','B'],['red','blue'],['●','○']]);return question(`${a}, ${b}, ${a}, ${b}, ?`,a);});

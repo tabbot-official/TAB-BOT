@@ -1,0 +1,128 @@
+import { section } from './_kit.js';
+// Converters: unit conversions, each a real command (<from>2<to> <number>).
+const fmt = (n) => { n = Number(n); if (!Number.isFinite(n)) throw new Error('result is not a number'); const a = Math.abs(n); return a !== 0 && (a >= 1e12 || a < 1e-6) ? n.toExponential(4) : String(Number(n.toPrecision(10))); };
+const E = [];
+const num = (a) => { const n = Number(String(a[0]).replace(/,/g, '')); if (!Number.isFinite(n)) throw new Error('give a number'); return n; };
+// linear: to base unit factor
+const lin = (name, from, to, f, ex, exp, names = [from, to]) => E.push({ name, description: `Convert ${names[0]} to ${names[1]}`, usage: `${name} <number>`, minArgs: 1, fn: (a) => { const n = num(a); return `${fmt(n)} ${from} = ${fmt(n * f)} ${to}`; }, tests: [[String(ex), `${fmt(ex)} ${from} = ${exp} ${to}`]] });
+const pair = (a, b, f, ex, exp, names) => { lin(`${a}2${b}`, a, b, f, ex, exp, names); lin(`${b}2${a}`, b, a, 1 / f, exp, fmt(ex), names && [names[1], names[0]]); };
+// length
+pair('km', 'mi', 0.621371, 10, '6.21371', ['kilometres', 'miles']);
+pair('m', 'ft', 3.28084, 10, '32.8084', ['metres', 'feet']);
+pair('cm', 'in', 0.393701, 10, '3.93701', ['centimetres', 'inches']);
+pair('mm', 'in', 0.0393701, 100, '3.93701', ['millimetres', 'inches']);
+pair('m', 'yd', 1.09361, 10, '10.9361', ['metres', 'yards']);
+pair('km', 'nmi', 0.539957, 10, '5.39957', ['kilometres', 'nautical miles']);
+pair('ft', 'in', 12, 3, '36', ['feet', 'inches']);
+pair('mi', 'ft', 5280, 2, '10560', ['miles', 'feet']);
+pair('m', 'cm', 100, 2, '200', ['metres', 'centimetres']);
+pair('km', 'm', 1000, 3, '3000', ['kilometres', 'metres']);
+pair('au', 'km', 149597870.7, 1, '149597870.7', ['astronomical units', 'kilometres']);
+lin('ly2km', 'ly', 'km', 9460730472580.8, 1, '9.4607e+12', ['light years', 'kilometres']);
+// mass
+pair('kg', 'lb', 2.20462, 10, '22.0462', ['kilograms', 'pounds']);
+pair('g', 'oz', 0.035274, 100, '3.5274', ['grams', 'ounces']);
+pair('kg', 'st', 0.157473, 10, '1.57473', ['kilograms', 'stone']);
+pair('t', 'kg', 1000, 2, '2000', ['tonnes', 'kilograms']);
+pair('lb', 'oz', 16, 2, '32', ['pounds', 'ounces']);
+pair('mg', 'g', 0.001, 500, '0.5', ['milligrams', 'grams']);
+pair('ct', 'g', 0.2, 10, '2', ['carats', 'grams']);
+pair('tola', 'g', 11.6638, 1, '11.6638', ['tola', 'grams']);
+// volume
+pair('l', 'gal', 0.264172, 10, '2.64172', ['litres', 'US gallons']);
+pair('ml', 'floz', 0.033814, 100, '3.3814', ['millilitres', 'US fluid ounces']);
+pair('l', 'qt', 1.05669, 10, '10.5669', ['litres', 'US quarts']);
+pair('l', 'pt', 2.11338, 10, '21.1338', ['litres', 'US pints']);
+pair('cup', 'ml', 236.588, 1, '236.588', ['US cups', 'millilitres']);
+pair('tbsp', 'ml', 14.7868, 2, '29.5736', ['tablespoons', 'millilitres']);
+pair('tsp', 'ml', 4.92892, 2, '9.85784', ['teaspoons', 'millilitres']);
+pair('m3', 'l', 1000, 2, '2000', ['cubic metres', 'litres']);
+pair('gal', 'galuk', 0.832674, 10, '8.32674', ['US gallons', 'UK gallons']);
+// area
+pair('sqm', 'sqft', 10.7639, 10, '107.639', ['square metres', 'square feet']);
+pair('acre', 'sqm', 4046.86, 1, '4046.86', ['acres', 'square metres']);
+pair('ha', 'acre', 2.47105, 10, '24.7105', ['hectares', 'acres']);
+pair('sqkm', 'sqmi', 0.386102, 10, '3.86102', ['square kilometres', 'square miles']);
+pair('sqyd', 'sqm', 0.836127, 10, '8.36127', ['square yards', 'square metres']);
+pair('bigha', 'sqm', 2529.29, 1, '2529.29', ['bigha (Delhi approx)', 'square metres']);
+pair('cent', 'sqft', 435.56, 1, '435.56', ['cent', 'square feet']);
+pair('gaj', 'sqft', 9, 1, '9', ['gaj (sq yard)', 'square feet']);
+// speed
+pair('kmh', 'mph', 0.621371, 100, '62.1371', ['km/h', 'mph']);
+pair('ms', 'kmh', 3.6, 10, '36', ['m/s', 'km/h']);
+pair('knot', 'kmh', 1.852, 10, '18.52', ['knots', 'km/h']);
+pair('mach', 'kmh', 1225.044, 1, '1225.044', ['mach (sea level)', 'km/h']);
+pair('fps', 'ms', 0.3048, 10, '3.048', ['feet/s', 'm/s']);
+// data
+pair('mb', 'kb', 1000, 2, '2000', ['megabytes', 'kilobytes']);
+pair('gb', 'mb', 1000, 2, '2000', ['gigabytes', 'megabytes']);
+pair('tb', 'gb', 1000, 2, '2000', ['terabytes', 'gigabytes']);
+pair('gib', 'mib', 1024, 2, '2048', ['gibibytes', 'mebibytes']);
+pair('byte', 'bit', 8, 2, '16', ['bytes', 'bits']);
+pair('mbps', 'mbs', 0.125, 80, '10', ['megabits/s', 'megabytes/s']);
+// time
+pair('hr', 'min', 60, 2, '120', ['hours', 'minutes']);
+pair('day', 'hr', 24, 2, '48', ['days', 'hours']);
+pair('week', 'day', 7, 2, '14', ['weeks', 'days']);
+pair('year', 'day', 365, 2, '730', ['years', 'days']);
+pair('min', 'sec', 60, 2, '120', ['minutes', 'seconds']);
+pair('sec', 'ms', 1000, 2, '2000', ['seconds', 'milliseconds']);
+// energy, power, pressure, force, angle
+pair('kcal', 'kj', 4.184, 10, '41.84', ['kilocalories', 'kilojoules']);
+pair('kwh', 'mj', 3.6, 10, '36', ['kilowatt-hours', 'megajoules']);
+pair('hp', 'kw', 0.745700, 10, '7.457', ['horsepower', 'kilowatts']);
+pair('btu', 'j', 1055.06, 1, '1055.06', ['BTU', 'joules']);
+pair('bar', 'psi', 14.5038, 10, '145.038', ['bar', 'psi']);
+pair('atm', 'pa', 101325, 1, '101325', ['atmospheres', 'pascals']);
+pair('mmhg', 'kpa', 0.133322, 100, '13.3322', ['mmHg', 'kilopascals']);
+pair('n', 'lbf', 0.224809, 10, '2.24809', ['newtons', 'pound-force']);
+pair('deg', 'rad', Math.PI / 180, 180, '3.141592654', ['degrees', 'radians']);
+pair('grad', 'deg', 0.9, 100, '90', ['gradians', 'degrees']);
+pair('rpm', 'rads', Math.PI / 30, 60, '6.283185307', ['rpm', 'rad/s']);
+pair('mpg', 'kpl', 0.425144, 10, '4.25144', ['miles per gallon (US)', 'km per litre']);
+pair('lbft', 'nm', 1.35582, 10, '13.5582', ['pound-feet', 'newton-metres']);
+// non-linear and special
+const spec = (name, description, fn, tests, usage) => E.push({ name, description, usage: usage || `${name} <number>`, minArgs: 1, fn, tests });
+spec('c2f', 'Celsius to Fahrenheit', (a) => { const n = num(a); return `${fmt(n)} °C = ${fmt(n * 9 / 5 + 32)} °F`; }, [['100', '100 °C = 212 °F']]);
+spec('f2c', 'Fahrenheit to Celsius', (a) => { const n = num(a); return `${fmt(n)} °F = ${fmt((n - 32) * 5 / 9)} °C`; }, [['212', '212 °F = 100 °C']]);
+spec('c2k', 'Celsius to Kelvin', (a) => { const n = num(a); return `${fmt(n)} °C = ${fmt(n + 273.15)} K`; }, [['0', '0 °C = 273.15 K']]);
+spec('k2c', 'Kelvin to Celsius', (a) => { const n = num(a); if (n < 0) throw new Error('Kelvin cannot be below 0'); return `${fmt(n)} K = ${fmt(n - 273.15)} °C`; }, [['273.15', '273.15 K = 0 °C']]);
+spec('f2k', 'Fahrenheit to Kelvin', (a) => { const n = num(a); return `${fmt(n)} °F = ${fmt((n - 32) * 5 / 9 + 273.15)} K`; }, [['32', '32 °F = 273.15 K']]);
+spec('k2f', 'Kelvin to Fahrenheit', (a) => { const n = num(a); if (n < 0) throw new Error('Kelvin cannot be below 0'); return `${fmt(n)} K = ${fmt((n - 273.15) * 9 / 5 + 32)} °F`; }, [['273.15', '273.15 K = 32 °F']]);
+spec('ft2ftin', 'Feet (decimal) to feet and inches', (a) => { const n = num(a); const ft = Math.floor(n); const inch = Math.round((n - ft) * 12 * 10) / 10; return `${fmt(n)} ft = ${ft} ft ${inch} in`; }, [['5.5', '5.5 ft = 5 ft 6 in']]);
+spec('cm2ftin', 'Centimetres to feet and inches', (a) => { const t = num(a) / 2.54; const ft = Math.floor(t / 12); const inch = Math.round((t - ft * 12) * 10) / 10; return `${fmt(num(a))} cm = ${ft} ft ${inch} in`; }, [['170', '170 cm = 5 ft 6.9 in']]);
+spec('ftin2cm', 'Feet and inches to cm (ftin2cm 5 10)', (a) => { const ft = Number(a[0]); const inch = Number(a[1] || 0); if (![ft, inch].every(Number.isFinite)) throw new Error('use: ftin2cm 5 10'); return `${ft} ft ${inch} in = ${fmt((ft * 12 + inch) * 2.54)} cm`; }, [['5 10', '5 ft 10 in = 177.8 cm']], 'ftin2cm <feet> [inches]');
+spec('sec2hms', 'Seconds to h:m:s', (a) => { const n = Math.floor(num(a)); if (n < 0) throw new Error('give a positive number'); return `${n} s = ${Math.floor(n / 3600)}h ${Math.floor((n % 3600) / 60)}m ${n % 60}s`; }, [['3725', '3725 s = 1h 2m 5s']]);
+spec('hms2sec', 'h:m:s to seconds (hms2sec 1:02:05)', (a) => { const p = String(a[0]).split(':').map(Number); if (p.length > 3 || p.some((x) => !Number.isFinite(x))) throw new Error('use h:m:s'); return `${a[0]} = ${p.reduce((s, x) => s * 60 + x, 0)} s`; }, [['1:02:05', '1:02:05 = 3725 s']], 'hms2sec <h:m:s>');
+spec('mins2hm', 'Minutes to hours and minutes', (a) => { const n = Math.floor(num(a)); return `${n} min = ${Math.floor(n / 60)}h ${n % 60}m`; }, [['135', '135 min = 2h 15m']]);
+spec('kmpl2l100', 'km per litre to litres per 100 km', (a) => { const n = num(a); if (n <= 0) throw new Error('must be above 0'); return `${fmt(n)} km/l = ${fmt(100 / n)} l/100km`; }, [['20', '20 km/l = 5 l/100km']]);
+spec('l1002kmpl', 'Litres per 100 km to km per litre', (a) => { const n = num(a); if (n <= 0) throw new Error('must be above 0'); return `${fmt(n)} l/100km = ${fmt(100 / n)} km/l`; }, [['5', '5 l/100km = 20 km/l']]);
+spec('pace2speed', 'Running pace (min per km) to km/h', (a) => { const p = String(a[0]).split(':'); const m = Number(p[0]) + Number(p[1] || 0) / 60; if (!(m > 0)) throw new Error('use 5:30'); return `${a[0]} min/km = ${fmt(60 / m)} km/h`; }, [['6:00', '6:00 min/km = 10 km/h']], 'pace2speed <min:sec per km>');
+spec('speed2pace', 'km/h to running pace (min per km)', (a) => { const n = num(a); if (n <= 0) throw new Error('must be above 0'); const m = 60 / n; return `${fmt(n)} km/h = ${Math.floor(m)}:${String(Math.round((m % 1) * 60)).padStart(2, '0')} min/km`; }, [['10', '10 km/h = 6:00 min/km']]);
+spec('bmr2cal', 'Calories to kJ and back guide', (a) => { const n = num(a); return `${fmt(n)} kcal = ${fmt(n * 4.184)} kJ`; }, [['100', '100 kcal = 418.4 kJ']]);
+spec('inr2lakh', 'Rupees to lakh and crore', (a) => { const n = num(a); return `₹${n.toLocaleString('en-IN')} = ${fmt(n / 1e5)} lakh = ${fmt(n / 1e7)} crore`; }, [['2500000', '₹25,00,000 = 25 lakh = 0.25 crore']]);
+spec('lakh2inr', 'Lakh to rupees', (a) => { const n = num(a); return `${fmt(n)} lakh = ₹${(n * 1e5).toLocaleString('en-IN')}`; }, [['25', '25 lakh = ₹25,00,000']]);
+spec('crore2inr', 'Crore to rupees', (a) => { const n = num(a); return `${fmt(n)} crore = ₹${(n * 1e7).toLocaleString('en-IN')}`; }, [['2', '2 crore = ₹2,00,00,000']]);
+spec('numformatin', 'Format a number the Indian way', (a) => num(a).toLocaleString('en-IN'), [['1234567', '12,34,567']]);
+spec('numformatus', 'Format a number the US way', (a) => num(a).toLocaleString('en-US'), [['1234567', '1,234,567']]);
+spec('shoeus2eu', 'US men shoe size to EU (approx)', (a) => { const n = num(a); return `US ${fmt(n)} (men) is about EU ${fmt(Math.round((n + 33) * 2) / 2)}`; }, [['9', 'US 9 (men) is about EU 42']]);
+spec('shoeus2uk', 'US men shoe size to UK', (a) => { const n = num(a); return `US ${fmt(n)} (men) is UK ${fmt(n - 1)}`; }, [['9', 'US 9 (men) is UK 8']]);
+spec('ringsize', 'US ring size to circumference mm', (a) => { const n = num(a); return `US ring size ${fmt(n)} = ${fmt(Number((36.5 + n * 2.55 / 1 * 0.5 + 0).toFixed(1)))} mm circumference (approx)`; }, [['7', 'US ring size 7 = 45.4 mm circumference (approx)']]);
+spec('pxrem', 'Pixels to rem (16px base)', (a) => { const n = num(a); return `${fmt(n)} px = ${fmt(n / 16)} rem`; }, [['24', '24 px = 1.5 rem']]);
+spec('rempx', 'rem to pixels (16px base)', (a) => { const n = num(a); return `${fmt(n)} rem = ${fmt(n * 16)} px`; }, [['1.5', '1.5 rem = 24 px']]);
+spec('pt2px', 'Points to pixels', (a) => { const n = num(a); return `${fmt(n)} pt = ${fmt(n * 96 / 72)} px`; }, [['12', '12 pt = 16 px']]);
+spec('px2pt', 'Pixels to points', (a) => { const n = num(a); return `${fmt(n)} px = ${fmt(n * 72 / 96)} pt`; }, [['16', '16 px = 12 pt']]);
+spec('rgb2hex', 'RGB to hex (rgb2hex 255 128 0)', (a) => { const v = a.slice(0, 3).map(Number); if (v.length < 3 || v.some((x) => !Number.isInteger(x) || x < 0 || x > 255)) throw new Error('use: rgb2hex 255 128 0'); return '#' + v.map((x) => x.toString(16).padStart(2, '0')).join(''); }, [['255 128 0', '#ff8000']], 'rgb2hex <r> <g> <b>');
+spec('hex2rgb', 'Hex color to RGB', (a) => { const h = String(a[0]).replace('#', ''); const f = h.length === 3 ? [...h].map((c) => c + c).join('') : h; if (!/^[0-9a-f]{6}$/i.test(f)) throw new Error('give a hex color like #ff8000'); return `rgb(${parseInt(f.slice(0, 2), 16)}, ${parseInt(f.slice(2, 4), 16)}, ${parseInt(f.slice(4, 6), 16)})`; }, [['#ff8000', 'rgb(255, 128, 0)']], 'hex2rgb <#hex>');
+spec('rgb2hsl', 'RGB to HSL', (a) => { const [r, g, b] = a.slice(0, 3).map((x) => Number(x) / 255); if ([r, g, b].some((x) => !(x >= 0 && x <= 1))) throw new Error('use: rgb2hsl 255 0 0'); const mx = Math.max(r, g, b), mn = Math.min(r, g, b); let h = 0, s = 0; const l = (mx + mn) / 2; if (mx !== mn) { const d = mx - mn; s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn); h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h *= 60; } return `hsl(${Math.round(h)}, ${Math.round(s * 100)}%, ${Math.round(l * 100)}%)`; }, [['255 0 0', 'hsl(0, 100%, 50%)']], 'rgb2hsl <r> <g> <b>');
+spec('hsl2rgb', 'HSL to RGB (hsl2rgb 120 100 50)', (a) => { const [H, S, L] = a.slice(0, 3).map(Number); if ([H, S, L].some((x) => !Number.isFinite(x))) throw new Error('use: hsl2rgb 120 100 50'); const s = S / 100, l = L / 100; const k = (n) => (n + H / 30) % 12; const f = (n) => l - s * Math.min(l, 1 - l) * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1)); return `rgb(${[f(0), f(8), f(4)].map((x) => Math.round(x * 255)).join(', ')})`; }, [['120 100 50', 'rgb(0, 255, 0)']], 'hsl2rgb <h> <s> <l>');
+spec('rgb2cmyk', 'RGB to CMYK', (a) => { const [r, g, b] = a.slice(0, 3).map((x) => Number(x) / 255); if ([r, g, b].some((x) => !(x >= 0 && x <= 1))) throw new Error('use: rgb2cmyk 255 0 0'); const k = 1 - Math.max(r, g, b); if (k === 1) return 'cmyk(0%, 0%, 0%, 100%)'; const c = (1 - r - k) / (1 - k), m = (1 - g - k) / (1 - k), y = (1 - b - k) / (1 - k); return `cmyk(${[c, m, y, k].map((x) => Math.round(x * 100) + '%').join(', ')})`; }, [['255 0 0', 'cmyk(0%, 100%, 100%, 0%)']], 'rgb2cmyk <r> <g> <b>');
+spec('lum', 'Relative luminance of a hex color', (a) => { const h = String(a[0]).replace('#', ''); if (!/^[0-9a-f]{6}$/i.test(h)) throw new Error('give a hex color like #ff8000'); const c = [0, 2, 4].map((i) => { const v = parseInt(h.slice(i, i + 2), 16) / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return `Luminance ${(0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]).toFixed(4)}`; }, [['#ffffff', 'Luminance 1.0000']], 'lum <#hex>');
+spec('contrast', 'WCAG contrast ratio of two hex colors', (a) => { const L = (x) => { const h = String(x).replace('#', ''); if (!/^[0-9a-f]{6}$/i.test(h)) throw new Error('give two hex colors'); const c = [0, 2, 4].map((i) => { const v = parseInt(h.slice(i, i + 2), 16) / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; }; const x = L(a[0]), y = L(a[1] || ''); const r = (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); return `Contrast ${r.toFixed(2)}:1 - ${r >= 7 ? 'AAA' : r >= 4.5 ? 'AA' : r >= 3 ? 'AA large text only' : 'fails WCAG'}`; }, [['#000000 #ffffff', 'Contrast 21.00:1 - AAA']], 'contrast <#hex1> <#hex2>');
+spec('wavelength', 'Frequency (Hz) to wavelength in metres', (a) => { const n = num(a); if (n <= 0) throw new Error('must be above 0'); return `${fmt(n)} Hz = ${fmt(299792458 / n)} m wavelength`; }, [['299792458', '299792458 Hz = 1 m wavelength']]);
+spec('db2ratio', 'Decibels to power ratio', (a) => { const n = num(a); return `${fmt(n)} dB = ${fmt(10 ** (n / 10))}x power`; }, [['3', '3 dB = 1.995262315x power']]);
+spec('ratio2db', 'Power ratio to decibels', (a) => { const n = num(a); if (n <= 0) throw new Error('must be above 0'); return `${fmt(n)}x power = ${fmt(10 * Math.log10(n))} dB`; }, [['100', '100x power = 20 dB']]);
+spec('mag2lux', 'Lux to foot-candles', (a) => { const n = num(a); return `${fmt(n)} lux = ${fmt(n * 0.092903)} foot-candles`; }, [['100', '100 lux = 9.2903 foot-candles']]);
+spec('dms2dec', 'Degrees minutes seconds to decimal (dms2dec 28 36 50)', (a) => { const [d, m = 0, s = 0] = a.map(Number); if (![d, m, s].every(Number.isFinite)) throw new Error('use: dms2dec 28 36 50'); return `${fmt(Math.sign(d || 1) * (Math.abs(d) + m / 60 + s / 3600))} degrees`; }, [['28 36 50', '28.61388889 degrees']], 'dms2dec <deg> [min] [sec]');
+spec('dec2dms', 'Decimal degrees to d m s', (a) => { const n = num(a); const A = Math.abs(n); const d = Math.floor(A); const m = Math.floor((A - d) * 60); const s = ((A - d) * 60 - m) * 60; return `${n < 0 ? '-' : ''}${d}° ${m}' ${s.toFixed(2)}"`; }, [['28.6139', `28° 36' 50.04"`]]);
+export default section('Converters', E);

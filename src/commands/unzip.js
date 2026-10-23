@@ -1,0 +1,2 @@
+import {uploaded} from '../utilities/media.js';import {unzip} from '../utilities/files.js';
+export default {name:'unzip',category:'Utilities',description:'Extract a small safe ZIP',usage:'unzip (reply to ZIP)',async run(ctx){const f=await uploaded(ctx);const files=await unzip(f.body);for(const file of files)await ctx.sock.sendMessage(ctx.jid,{document:file.body,mimetype:file.type.mime,fileName:file.name},{quoted:ctx.msg});}};

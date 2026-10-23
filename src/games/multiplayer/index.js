@@ -1,0 +1,2 @@
+import ttt from './ttt.js';import connect4 from './connect4.js';import rps from './rps.js';import duel from './duel.js';import quizbattle from './quizbattle.js';import wordbattle from './wordbattle.js';import numberbattle from './numberbattle.js';import emojibattle from './emojibattle.js';import reaction from './reaction.js';import teamquiz from './teamquiz.js';
+export const multiplayerModules=new Map([ttt,connect4,rps,duel,quizbattle,wordbattle,numberbattle,emojibattle,reaction,teamquiz].map(g=>[g.name,g]));

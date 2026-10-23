@@ -1,0 +1,2 @@
+import {parseCategory,draw,format,HELP} from '../games/truthdare/index.js';
+export default {name:'tod',aliases:['truthordare'],category:'Games',description:'Random truth or dare',usage:'tod [category]',async run(ctx){const r=parseCategory(ctx.args[0]);if(r.error)return ctx.reply('Unknown category. '+HELP);const kind=Math.random()<0.5?'truth':'dare';return ctx.reply(format(kind,draw(kind,r.cat,ctx.jid)));}};

@@ -1,0 +1,3 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {generateQR} from '../src/qr/index.js';
+test('QR accepts text URL contacts Wi-Fi and Unicode as PNG',async()=>{for(const t of ['hello','https://example.com/a?b=c','BEGIN:VCARD\nFN:Example\nEND:VCARD','WIFI:T:WPA;S:Example;P:password;;','नमस्ते']){const b=await generateQR(t);assert.equal(b.subarray(0,8).toString('hex'),'89504e470d0a1a0a');assert.equal(b.readUInt32BE(16),1024);assert.equal(b.readUInt32BE(20),1024);}});
+test('QR rejects empty excessive and control input gracefully',async()=>{await assert.rejects(generateQR(' '),/Usage/);await assert.rejects(generateQR('x'.repeat(2001)),/too long/);await assert.rejects(generateQR('a\0b'),/control/);});

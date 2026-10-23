@@ -1,0 +1,2 @@
+import {uploaded} from '../utilities/media.js';import {makeZip} from '../utilities/files.js';
+export default {name:'zip',category:'Utilities',description:'Compress one safe file',usage:'zip (reply to file)',async run(ctx){const f=await uploaded(ctx);const document=await makeZip(f.body,f.name);await ctx.sock.sendMessage(ctx.jid,{document,mimetype:'application/zip',fileName:'archive.zip'},{quoted:ctx.msg});}};

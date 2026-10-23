@@ -1,0 +1,7 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {parseVideoArgs,sizeFor,checkUrl,isWhatsAppSafe,waitTask} from '../src/services/agnesVideo.js';
+test('video args and sizes',()=>{assert.deepEqual(parseVideoArgs(['a','cat','--720']),{res:'720p',prompt:'a cat'});assert.equal(parseVideoArgs(['x']).res,'1080p');assert.deepEqual(sizeFor('1080p'),{width:1920,height:1080});});
+test('video url host allowlist',()=>{assert.ok(checkUrl('https://cos-platform-outputs.agnes-ai.cn/videos/a.mp4'));for(const u of ['http://x.agnes-ai.cn/a','https://evil.com/a','https://agnes-ai.cn.evil.com/a','nope'])assert.throws(()=>checkUrl(u));});
+test('codec check',()=>{const ok={streams:[{codec_type:'video',codec_name:'h264',pix_fmt:'yuv420p',profile:'High',width:1920,height:1080}]};assert.ok(isWhatsAppSafe(ok));assert.ok(!isWhatsAppSafe({streams:[{codec_type:'video',codec_name:'hevc',pix_fmt:'yuv420p',width:2,height:2}]}));assert.ok(!isWhatsAppSafe({streams:[{codec_type:'video',codec_name:'h264',pix_fmt:'yuv444p',profile:'High',width:2,height:2}]}));});
+test('aivideo command loads, no name clash',async()=>{const c=(await import('../src/commands/aivideo.js')).default;assert.equal(c.name,'aivideo');const y=(await import('../src/commands/ytvideo.js')).default;assert.notEqual(c.name,y.name);assert.ok(!y.aliases.some(a=>c.aliases.includes(a)));});
+test('waitTask times out',async()=>{await assert.rejects(waitTask('x','k',{timeoutMs:5,everyMs:1,sleep:async()=>{}}),e=>true);});

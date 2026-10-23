@@ -1,0 +1,52 @@
+{
+  "name": "tab-whatsapp-bot",
+  "version": "2.0.0",
+  "description": "Tab: a modular multifunctional WhatsApp bot (Baileys) with downloaders, AI, image tools and group management (based on Jarvis by nicholas-pp8)",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node scripts/runner.js",
+    "dev": "node --watch src/index.js",
+    "setup:ytdlp": "node scripts/install-ytdlp.js",
+    "postinstall": "node scripts/install-ytdlp.js",
+    "test": "node --test --test-force-exit test/*.test.js",
+    "check:panel": "node scripts/panel-check.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@gradio/client": "2.7.1",
+    "@vreden/youtube_scraper": "^1.2.9",
+    "@whiskeysockets/baileys": "^7.0.0-rc14",
+    "acorn": "8.19.0",
+    "adm-zip": "^0.6.1",
+    "axios": "^1.20.0",
+    "bottleneck": "^2.19.5",
+    "cheerio": "^1.2.0",
+    "dayjs": "^1.11.23",
+    "dotenv": "^18.0.5",
+    "figlet": "^1.12.0",
+    "file-type": "^22.2.0",
+    "form-data": "^4.0.6",
+    "generate-password": "^1.7.1",
+    "jsqr": "^1.4.0",
+    "libphonenumber-js": "^1.13.14",
+    "link-preview-js": "^3.2.0",
+    "msedge-tts": "^2.0.8",
+    "node-cron": "^4.6.0",
+    "pdfkit": "^0.20.2",
+    "pino": "^10.3.1",
+    "qrcode": "^1.5.4",
+    "sharp": "^0.35.5",
+    "systeminformation": "^5.33.15",
+    "unpdf": "^1.8.1",
+    "validator": "^13.15.35",
+    "yt-search": "^2.13.1"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^13.0.3",
+    "ffmpeg-static": "^5.3.0"
+  }
+}

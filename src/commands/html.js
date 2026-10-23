@@ -1,0 +1,2 @@
+import {fetchHTML,extractHTML} from '../utilities/web.js';
+export default {name:'html',category:'Utilities',description:'Extract text from a public HTML page',usage:'html <URL>',minArgs:1,async run(ctx){if(!/^https?:\/\//i.test(ctx.args[0]||''))throw new Error('URL expected: use html https://example.com (not inline HTML)');const p=extractHTML((await fetchHTML(ctx.args[0])).body);await ctx.reply([p.title,p.description,p.text].filter(Boolean).join('\n'));}};

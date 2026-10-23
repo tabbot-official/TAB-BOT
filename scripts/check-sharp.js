@@ -1,0 +1,2 @@
+import sharp from 'sharp';
+const input=await sharp({create:{width:32,height:32,channels:4,background:{r:30,g:100,b:180,alpha:1}}}).png().toBuffer();const output=await sharp(input).resize(16,16).webp().toBuffer();const meta=await sharp(output).metadata();if(meta.format!=='webp'||meta.width!==16)throw new Error('Sharp runtime smoke failed');console.log('[sharp] Runtime PNG -> resized WebP smoke PASS');

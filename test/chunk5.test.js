@@ -1,0 +1,5 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {hasLink} from '../src/groups/moderation.js';
+test('link detection with whitelist',()=>{assert.ok(hasLink('see https://evil.com/x'));assert.ok(!hasLink('hello there'));assert.ok(!hasLink('watch https://www.youtube.com/watch?v=1',['youtube.com']));assert.ok(!hasLink('https://m.youtube.com/a',['youtube.com']));assert.ok(hasLink('https://youtube.com.evil.com/a',['youtube.com']));assert.ok(hasLink('https://youtube.com/a https://evil.com',['youtube.com']));assert.ok(hasLink('join chat.whatsapp.com/AbCdEf123',['whatsapp.com']));});
+test('group commands load',async()=>{for(const n of ['antiinvite','whitelist','welcomeimage'])assert.equal((await import('../src/commands/'+n+'.js')).default.name,n);});
+test('whitelist command is safe without storage',async()=>{const c=(await import('../src/commands/whitelist.js')).default;const out=[];await c.run({isGroup:true,jid:'t@g.us',args:['add','example.com'],reply:async t=>out.push(t)});assert.match(out[0],/not ready|Allowed/);await c.run({isGroup:false,args:[],reply:async t=>out.push(t)});assert.match(out[1],/Group only/);});

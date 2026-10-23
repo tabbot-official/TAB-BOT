@@ -1,0 +1,2 @@
+import {t} from '../i18n/index.js';
+import {diagnostics} from '../recovery/index.js';export default {name:'errors',category:'Diagnostics',ownerOnly:true,description:'Private error IDs and recurrence counts; no message contents',usage:'errors',async run(ctx){if(ctx.isGroup)throw new Error('Use errors in a private chat');const d=diagnostics();await ctx.reply(t(ctx,'desc_errors')+'\n'+d.recent.slice(0,10).map(x=>`${x.id} ${x.command}: ${x.kind} (${x.count})`).join('\n')+'\n'+t(ctx,'top')+'\n'+Object.entries(d.recurring).map(([k,v])=>`${k}: ${v}`).join('\n'));}};

@@ -1,0 +1,15 @@
+{
+  "quran": {
+    "indexSha256": "1fff12e8b49ab69b3d87eb9aac1cd0782fd91ee0d9436c4f9569fb2e96f37777",
+    "fullSha256": "7f30c647331a61100ebf24a80507dc0fcdd9f2df97f1312b5b2dfcb982a7f326"
+  },
+  "gita": {
+    "indexSha256": "4d9437625d5bce95a7700ff0291e5558a4d9d3564a1d343a6541152701d6f33a",
+    "fullSha256": "913b2f9291e286da9e5e8eff8f0abe388265dc53174db612a60abeb7065690c6"
+  },
+  "bible": {
+    "indexSha256": "7db2e0b76512b40d425b547f8b4be5cea15c6549564baf1d6eb8b80cd6577a2a",
+    "fullSha256": "490a60f8e05c5f969c75fa98d2fe15c12a9830e9e568d8b66c73fe6570d906b2",
+    "sourceArchiveSha256": "633f1faff34796b35ffe2f55ca69e89fddc0e611a28cc58dff9defad4b8e5340"
+  }
+}

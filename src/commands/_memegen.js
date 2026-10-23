@@ -1,0 +1,4 @@
+export function esc(s){return String(s).trim().replace(/-/g,'--').replace(/_/g,'__').replace(/ /g,'_').replace(/\?/g,'~q').replace(/%/g,'~p').replace(/#/g,'~h').replace(/\//g,'~s').replace(/\\/g,'~b').replace(/"/g,"''").replace(/\n/g,'~n').replace(/[<>&]/g,'')||'_';}
+export function parseMeme(raw){const parts=String(raw||'').split('|').map(s=>s.trim());return parts;}
+export function memeUrl(id,top,bottom){return `https://api.memegen.link/images/${encodeURIComponent(id)}/${encodeURIComponent(esc(top))}/${encodeURIComponent(esc(bottom))}.jpg?width=700`;}
+export function safeUrl(u){let x;try{x=new URL(u);}catch{return null;}if(!/^https?:$/.test(x.protocol)||x.username||x.password)return null;const h=x.hostname.toLowerCase();if(h==='localhost'||!h.includes('.')||/^(\d+\.){3}\d+$/.test(h)||h.endsWith('.local')||h.endsWith('.internal'))return null;if(u.length>2000)return null;return x.toString();}

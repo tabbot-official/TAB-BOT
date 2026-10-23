@@ -1,0 +1,9 @@
+# Languages and coverage
+
+Registry: Debian iso-codes 4.9.0, ISO 639-3 JSON, 7847 codes. This is a versioned snapshot, not a live claim about the latest SIL annual changes. Names include historical, extinct and constructed languages. The registry is not 7847 translations. Source: https://salsa.debian.org/iso-codes-team/iso-codes . Its LGPL-2.1-or-later notice and complete license are in LICENSE.iso-codes.txt. The locale files are separately authored interface strings.
+
+`/languages [name|code|page]` lists/searches every registry entry, 30 per page. ISO two-letter aliases work when present. `/language hi` sets a user's choice. `/setlanguage bn` requires group-admin access and sets that group's choice. Group settings override personal settings only inside the group. `/resetlanguage` resets personal choice; `/resetlanguage group` requires group-admin access and resets that group. Each missing key falls back to English. Command names remain unchanged.
+
+Add a JSON file named for its three-letter registry code under src/locales; no core-code changes are needed. Restart to reload cached locale strings after editing. English keys define the interface schema; preserve named placeholders like {balance}, {amount}, {number}, {code}. Test placeholder coverage before deployment. Use src/i18n/coverage.json for the exact per-locale translated and fallback-key counts.
+
+Locale-file count is NOT complete-interface translation count. coverage.json records the core164-key schema in77complete locale files (English plus76non-English). The separate runtime audit reports228keys in70complete locale files (English plus69non-English). These schemas cover different message paths, so their counts must not be combined as translated-language totals. Machine validation checks schema and placeholders, not native fluency. Legacy command-specific messages and automated group events are not all localized yet. Full 100+ localized-interface goal remains open.

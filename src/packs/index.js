@@ -1,0 +1,24 @@
+import upload from './upload.js';
+import social2 from './social2.js';
+import extras from './extras.js';
+import image from './image.js';
+import owner from './owner.js';
+import web from './web.js';
+import { daily, productivity, group, utilities } from './life.js';
+import { study, work } from './study.js';
+import pranks from './pranks.js';
+import facts from './facts.js';
+import games from './games.js';
+import fun from './fun.js';
+import dev from './dev.js';
+import finance from './finance.js';
+import health from './health.js';
+import datetime from './datetime.js';
+import math from './math.js';
+import convert from './convert.js';
+import encode from './encode.js';
+import text from './text.js';
+import xplatforms from './x_platforms.js';
+// Command packs: each pack file default-exports an array of command objects built with _kit.js.
+export const packs = [...text, ...encode, ...convert, ...math, ...datetime, ...health, ...finance, ...dev, ...fun, ...games, ...facts, ...pranks, ...study, ...work, ...daily, ...productivity, ...group, ...utilities, ...web, ...owner, ...upload, ...social2, ...extras, ...image, ...xplatforms];
+export default packs;

@@ -1,0 +1,2 @@
+import {t} from '../i18n/index.js';
+import {economy} from '../economy/index.js';export default {name:'economyrules',category:'Economy',ownerOnly:true,description:'Configure virtual earning limits',usage:'economyrules [daily|earn|earnCooldown|maxBalance value]',async run(ctx){if(ctx.args.length){if(ctx.args.length!==2)throw new Error('Use economyrules rule whole_number');economy.configure(ctx.args[0],Number(ctx.args[1]));}await ctx.reply(t(ctx,'rules_summary',{...economy.rules(),seconds:economy.rules().earnCooldown/1000}));}};

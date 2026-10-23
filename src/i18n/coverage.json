@@ -1,0 +1,547 @@
+{
+  "english_keys": 164,
+  "locale_files": 77,
+  "registry_entries": 7847,
+  "complete_non_english_locales": 76,
+  "locales": {
+    "afr": {
+      "name": "Afrikaans",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 160,
+      "complete_core_schema": true
+    },
+    "ara": {
+      "name": "العربية",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 163,
+      "complete_core_schema": true
+    },
+    "aze": {
+      "name": "Azərbaycanca",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 161,
+      "complete_core_schema": true
+    },
+    "bak": {
+      "name": "Башҡортса",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 161,
+      "complete_core_schema": true
+    },
+    "bel": {
+      "name": "Беларуская",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 161,
+      "complete_core_schema": true
+    },
+    "ben": {
+      "name": "বাংলা",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 164,
+      "complete_core_schema": true
+    },
+    "bos": {
+      "name": "Bosanski",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 160,
+      "complete_core_schema": true
+    },
+    "bul": {
+      "name": "Български",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 160,
+      "complete_core_schema": true
+    },
+    "cat": {
+      "name": "Català",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 159,
+      "complete_core_schema": true
+    },
+    "ceb": {
+      "name": "Binisaya (Cebuano)",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 155,
+      "complete_core_schema": true
+    },
+    "ces": {
+      "name": "Čeština",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 163,
+      "complete_core_schema": true
+    },
+    "cym": {
+      "name": "Cymraeg",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 159,
+      "complete_core_schema": true
+    },
+    "dan": {
+      "name": "Dansk",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 162,
+      "complete_core_schema": true
+    },
+    "deu": {
+      "name": "Deutsch",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 159,
+      "complete_core_schema": true
+    },
+    "ell": {
+      "name": "Ελληνικά",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 160,
+      "complete_core_schema": true
+    },
+    "eng": {
+      "name": "English",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 0,
+      "complete_core_schema": true
+    },
+    "est": {
+      "name": "Eesti",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 160,
+      "complete_core_schema": true
+    },
+    "eus": {
+      "name": "Euskara",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 160,
+      "complete_core_schema": true
+    },
+    "fas": {
+      "name": "فارسی",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 161,
+      "complete_core_schema": true
+    },
+    "fil": {
+      "name": "Filipino",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 155,
+      "complete_core_schema": true
+    },
+    "fin": {
+      "name": "Suomi",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 163,
+      "complete_core_schema": true
+    },
+    "fra": {
+      "name": "Français",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 158,
+      "complete_core_schema": true
+    },
+    "gle": {
+      "name": "Gaeilge",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 160,
+      "complete_core_schema": true
+    },
+    "glg": {
+      "name": "Galego",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 160,
+      "complete_core_schema": true
+    },
+    "guj": {
+      "name": "ગુજરાતી",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 163,
+      "complete_core_schema": true
+    },
+    "heb": {
+      "name": "עברית",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 161,
+      "complete_core_schema": true
+    },
+    "hin": {
+      "name": "हिन्दी",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 164,
+      "complete_core_schema": true
+    },
+    "hrv": {
+      "name": "Hrvatski",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 160,
+      "complete_core_schema": true
+    },
+    "hun": {
+      "name": "Magyar",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 163,
+      "complete_core_schema": true
+    },
+    "hye": {
+      "name": "Հայերեն",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 161,
+      "complete_core_schema": true
+    },
+    "ind": {
+      "name": "Bahasa Indonesia",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 160,
+      "complete_core_schema": true
+    },
+    "isl": {
+      "name": "Íslenska",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 161,
+      "complete_core_schema": true
+    },
+    "ita": {
+      "name": "Italiano",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 160,
+      "complete_core_schema": true
+    },
+    "jav": {
+      "name": "Basa Jawa",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 157,
+      "complete_core_schema": true
+    },
+    "jpn": {
+      "name": "日本語",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 162,
+      "complete_core_schema": true
+    },
+    "kan": {
+      "name": "ಕನ್ನಡ",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 160,
+      "complete_core_schema": true
+    },
+    "kat": {
+      "name": "ქართული",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 161,
+      "complete_core_schema": true
+    },
+    "kaz": {
+      "name": "Қазақша",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 161,
+      "complete_core_schema": true
+    },
+    "khm": {
+      "name": "ខ្មែរ",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 160,
+      "complete_core_schema": true
+    },
+    "kin": {
+      "name": "Ikinyarwanda",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 163,
+      "complete_core_schema": true
+    },
+    "kir": {
+      "name": "Кыргызча",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 161,
+      "complete_core_schema": true
+    },
+    "kor": {
+      "name": "한국어",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 162,
+      "complete_core_schema": true
+    },
+    "lav": {
+      "name": "Latviešu",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 161,
+      "complete_core_schema": true
+    },
+    "lit": {
+      "name": "Lietuvių",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 160,
+      "complete_core_schema": true
+    },
+    "mal": {
+      "name": "മലയാളം",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 160,
+      "complete_core_schema": true
+    },
+    "mar": {
+      "name": "मराठी",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 163,
+      "complete_core_schema": true
+    },
+    "mkd": {
+      "name": "Македонски",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 160,
+      "complete_core_schema": true
+    },
+    "mon": {
+      "name": "Монгол",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 160,
+      "complete_core_schema": true
+    },
+    "msa": {
+      "name": "Bahasa Melayu",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 159,
+      "complete_core_schema": true
+    },
+    "nep": {
+      "name": "नेपाली",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 160,
+      "complete_core_schema": true
+    },
+    "nld": {
+      "name": "Nederlands",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 159,
+      "complete_core_schema": true
+    },
+    "nob": {
+      "name": "Norsk bokmål",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 163,
+      "complete_core_schema": true
+    },
+    "pan": {
+      "name": "ਪੰਜਾਬੀ",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 160,
+      "complete_core_schema": true
+    },
+    "pol": {
+      "name": "Polski",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 159,
+      "complete_core_schema": true
+    },
+    "por": {
+      "name": "Português",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 160,
+      "complete_core_schema": true
+    },
+    "ron": {
+      "name": "Română",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 162,
+      "complete_core_schema": true
+    },
+    "rus": {
+      "name": "Русский",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 163,
+      "complete_core_schema": true
+    },
+    "sin": {
+      "name": "සිංහල",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 160,
+      "complete_core_schema": true
+    },
+    "slk": {
+      "name": "Slovenčina",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 163,
+      "complete_core_schema": true
+    },
+    "slv": {
+      "name": "Slovenščina",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 160,
+      "complete_core_schema": true
+    },
+    "sna": {
+      "name": "ChiShona",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 163,
+      "complete_core_schema": true
+    },
+    "spa": {
+      "name": "Español",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 160,
+      "complete_core_schema": true
+    },
+    "sqi": {
+      "name": "Shqip",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 160,
+      "complete_core_schema": true
+    },
+    "srp": {
+      "name": "Srpski (latinica)",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 160,
+      "complete_core_schema": true
+    },
+    "swa": {
+      "name": "Kiswahili",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 160,
+      "complete_core_schema": true
+    },
+    "swe": {
+      "name": "Svenska",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 160,
+      "complete_core_schema": true
+    },
+    "tam": {
+      "name": "தமிழ்",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 160,
+      "complete_core_schema": true
+    },
+    "tat": {
+      "name": "Татарча",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 161,
+      "complete_core_schema": true
+    },
+    "tel": {
+      "name": "తెలుగు",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 160,
+      "complete_core_schema": true
+    },
+    "tha": {
+      "name": "ไทย",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 160,
+      "complete_core_schema": true
+    },
+    "tuk": {
+      "name": "Türkmençe",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 159,
+      "complete_core_schema": true
+    },
+    "tur": {
+      "name": "Türkçe",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 161,
+      "complete_core_schema": true
+    },
+    "ukr": {
+      "name": "Українська",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 163,
+      "complete_core_schema": true
+    },
+    "urd": {
+      "name": "اردو",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 160,
+      "complete_core_schema": true
+    },
+    "uzb": {
+      "name": "Oʻzbekcha",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 161,
+      "complete_core_schema": true
+    },
+    "vie": {
+      "name": "Tiếng Việt",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 158,
+      "complete_core_schema": true
+    },
+    "zho": {
+      "name": "中文",
+      "authored_keys": 164,
+      "fallback_keys": 0,
+      "translated_keys": 163,
+      "complete_core_schema": true
+    }
+  }
+}

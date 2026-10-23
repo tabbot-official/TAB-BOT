@@ -1,0 +1,7 @@
+import {rt,RuntimeInputError} from '../i18n/runtime.js';
+import {replyFailure} from '../recovery/reply.js';
+import {t} from '../i18n/index.js';
+import https from 'node:https';import {performance} from 'node:perf_hooks';
+const recent=new Map();let busy=false;
+export function latencyProbe(request=https.request){return new Promise((resolve,reject)=>{const start=performance.now();const req=request('https://www.cloudflare.com/',{method:'HEAD',timeout:5000},res=>{res.resume();if(res.statusCode<200||res.statusCode>=400)return reject(new Error('Latency endpoint unavailable (HTTP '+res.statusCode+')'));resolve(performance.now()-start);});req.on('timeout',()=>req.destroy(new Error('Latency probe timed out')));req.on('error',reject);req.end();});}
+export default {name:'speedtest',category:'System',ownerOnly:true,description:'Host HTTPS latency (quick, not bandwidth)',usage:'speedtest quick',async run(ctx){const mode=ctx.args[0]||'quick';if(mode==='full')return ctx.reply(rt(ctx,'speedtest_full_unavailable'));if(mode!=='quick')throw new RuntimeInputError('speedtest_usage');if(busy)return ctx.reply(t(ctx,'error_service'));if(Date.now()-(recent.get(ctx.sender)||0)<60000)return ctx.reply(t(ctx,'cooldown',{seconds:60}));recent.set(ctx.sender,Date.now());busy=true;try{const ms=await latencyProbe();await ctx.reply(rt(ctx,'speedtest_result',{milliseconds:ms.toFixed(0)}));}catch(e){await replyFailure(ctx,'speedtest',e);}finally{busy=false;}}};
