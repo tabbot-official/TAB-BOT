@@ -53,15 +53,26 @@ export async function removeJobDir(dir) {
 }
 
 /** Deletes abandoned job folders older than maxAgeMs. */
+// Tab: jarvis-fonts.conf (xxqc sticker fonts) lives in temp and FONTCONFIG_FILE points at it; the 10-minute file sweep deleted it.
+const KEEP_IN_TEMP = /^jarvis-/;
+const SCRATCH_DIRS = /^(stk|jv-video|gh|mf|mega)-/;
 export async function cleanupStaleJobs(maxAgeMs = config.limits.tempMaxAgeMs) {
   let removed = 0;
   try {
     const entries = await fs.readdir(config.paths.temp, { withFileTypes: true });
     for (const e of entries) {
+      if (KEEP_IN_TEMP.test(e.name)) continue; // Tab: long-lived files the bot points at (fontconfig for stickers)
       if (e.isFile() || e.isSymbolicLink()) { // stray scratch files (upload/encrypt/convert temp)
         const fp = path.join(config.paths.temp, e.name);
         const fst = await fs.lstat(fp).catch(() => null);
         if (fst && Date.now() - fst.mtimeMs > Math.max(maxAgeMs, 10 * 60 * 1000) ) { await fs.rm(fp, { force: true }).catch(() => {}); removed++; }
+        continue;
+      }
+      // Tab: scratch folders made outside createJobDir (stickers, video tools, gitclone/mediafire/mega) were never swept.
+      if (e.isDirectory() && !e.name.startsWith(JOB_PREFIX) && SCRATCH_DIRS.test(e.name)) {
+        const full = path.join(config.paths.temp, e.name);
+        const st = await fs.lstat(full).catch(() => null);
+        if (st && Date.now() - st.mtimeMs > Math.max(maxAgeMs, 60 * 60 * 1000)) { await fs.rm(full, { recursive: true, force: true }).catch(() => {}); removed++; }
         continue;
       }
       if (!e.isDirectory() || !e.name.startsWith(JOB_PREFIX)) continue;
