@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 // Tab: pure helpers for WhatsApp linking (version, browser identity, number format, QR secret).
 // Kept free of sockets so they are unit-testable.
 
@@ -58,3 +60,32 @@ export function rotateQrAdvSecret(qr, advB64) {
   fields[3] = advB64;
   return head + fields.join(',');
 }
+
+// ---- WhatsApp 429 rate-overlimit on code requests (Oct 24): remember it on disk so a restart doesn't ask again.
+
+/** True when a Baileys error / error node means WhatsApp's 429 rate-overlimit. */
+export function isRateLimitError(err) {
+  if (!err) return false;
+  const nums = [err.data, err.output?.statusCode, err.statusCode, err.status, err.code, err.data?.attrs?.code];
+  if (nums.some((n) => Number(n) === 429)) return true;
+  return /rate[-_ ]?overlimit|\b429\b/i.test(String(err.message || err));
+}
+
+const RL_FILE = 'pairing-ratelimit.json';
+export function rateLimitHours(env = process.env) {
+  const h = Number(env.PAIRING_RATELIMIT_HOURS);
+  return h > 0 && h <= 48 ? h : 4;
+}
+export function markPairingRateLimited(dir, reason = '', now = Date.now(), env = process.env) {
+  const until = now + rateLimitHours(env) * 3600e3;
+  try { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(path.join(dir, RL_FILE), JSON.stringify({ at: new Date(now).toISOString(), until, reason: String(reason).slice(0, 200) })); } catch { /* best effort */ }
+  return until;
+}
+export function pairingRateLimit(dir, now = Date.now()) {
+  try {
+    const j = JSON.parse(fs.readFileSync(path.join(dir, RL_FILE), 'utf8'));
+    const until = Number(j.until) || 0;
+    return { active: until > now, until, reason: j.reason || '' };
+  } catch { return { active: false, until: 0, reason: '' }; }
+}
+export function clearPairingRateLimit(dir) { try { fs.rmSync(path.join(dir, RL_FILE), { force: true }); } catch { /* ignore */ } }

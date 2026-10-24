@@ -7,7 +7,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import * as BaileysLib from '@whiskeysockets/baileys';
 import { randomBytes } from 'node:crypto';
-import { pickBrowser, pickVersion, normalizePairingNumber, rotateQrAdvSecret } from './pairingSetup.js';
+import { pickBrowser, pickVersion, normalizePairingNumber, rotateQrAdvSecret, isRateLimitError, markPairingRateLimited, pairingRateLimit, clearPairingRateLimit } from './pairingSetup.js';
 import pino from 'pino';
 import {connection,stop as stopOps} from '../ops/index.js';
 import config from '../config/config.js';
@@ -63,16 +63,33 @@ async function wipeAuth() {
   await fs.mkdir(config.paths.auth, { recursive: true });
 }
 
+// Tab: a pairing that cannot go on (WhatsApp 429 rate-overlimit, or too many attempts) parks the process IDLE instead of
+// exiting: an exit makes the hosting panel restart the bot, and every restart would ask WhatsApp for yet another code.
+let pairingParked = false;
+async function parkPairing(reason, { rateLimited = false } = {}) {
+  if (pairingParked) return;
+  pairingParked = true;
+  if (rateLimited && !pairingRateLimit(config.paths.data).active) markPairingRateLimited(config.paths.data, reason); // keep the original window on a restart
+  logger.error(rateLimited
+    ? '[pairing] WhatsApp rate limit (429): wait several hours, stopping code requests. The bot stays idle (no restart, no new codes). ' +
+      `Next try after ${new Date(pairingRateLimit(config.paths.data).until).toISOString()} - or delete data/pairing-ratelimit.json and restart once.`
+    : '[pairing] ' + reason + ' Stopping code requests to avoid a WhatsApp rate limit. The bot stays idle; restart it when you are ready to link.');
+  writeState(rateLimited ? 'pairing_rate_limited' : 'pairing_stopped', { code: rateLimited ? 429 : null });
+  clearPairingQr(config.paths.data).catch(() => {});
+  try { sock?.end(undefined); } catch { /* ignore */ }
+  setInterval(() => {}, 1 << 30); // keep the process alive and quiet
+}
+
 async function requestPairing(s) {
   try {
+    if (pairingParked) return;
     if (!pairingNumber) pairingNumber = await promptNumber();
     pairingNumber = normalizePairingNumber(pairingNumber);
     if (s.authState?.creds?.registered || s.authState?.creds?.account) return;
     pairingAttempts++;
     if (pairingAttempts > MAX_PAIRING_ATTEMPTS) {
       logger.error('Pairing was not completed after several attempts. Stopping to avoid WhatsApp rate limits. Start the bot again when ready.');
-      clearPairingQr(config.paths.data).catch(() => {});
-      return shutdown(1);
+      return parkPairing('Pairing was not completed after ' + MAX_PAIRING_ATTEMPTS + ' codes.');
     }
     const code = await s.requestPairingCode(pairingNumber);
     pairing?.relayCode(code).catch(() => {});
@@ -86,6 +103,7 @@ async function requestPairing(s) {
     console.log('==============================================\n');
     logger.warn('PAIRING CODE issued to owner number, valid about 2 minutes: ' + pretty);
   } catch (err) {
+    if (isRateLimitError(err)) return parkPairing('requestPairingCode: ' + (err?.message || '429'), { rateLimited: true });
     logger.error('Could not get a pairing code:', err);
   }
 }
@@ -121,6 +139,9 @@ export async function startWhatsApp() {
   stopping = false;
   { const c = await claimSession({ eco: config.ecosystem, authDir: config.paths.auth, dataDir: config.paths.data }); if (c.ok) logger.info('Your WhatsApp session from the pairing website was collected. No second link is needed.'); }
   const { state, saveCreds } = await useMultiFileAuthState(config.paths.auth);
+  if (!state.creds.registered && !qrOnly() && pairingRateLimit(config.paths.data).active && process.env.PAIRING_RATELIMIT_IGNORE !== 'on') {
+    return parkPairing('still inside the WhatsApp rate-limit window', { rateLimited: true });
+  }
   // Ask for the number BEFORE opening the socket, so the pairing code is fresh when it appears.
   if (!pairingNumber && !state.creds.registered && config.ecosystem.ticket && config.ecosystem.number) pairingNumber = config.ecosystem.number;
   if (!state.creds.registered && qrOnly()) {
@@ -279,6 +300,7 @@ export async function startWhatsApp() {
         if (s.authState.creds.registered) return;
         const err = (node.content || []).find?.((c) => c?.tag === 'error');
         logger.warn(`[pairing] WhatsApp answered a link request with error ${err?.attrs?.code || '?'} ${err?.attrs?.text || ''}`.trim() + (pairingRequested ? ' (code request: check the number is the phone\'s WhatsApp number, country code first)' : ''));
+        if (String(err?.attrs?.code) === '429' || /rate-overlimit/i.test(String(err?.attrs?.text || ''))) parkPairing('link request answered 429 ' + (err?.attrs?.text || 'rate-overlimit'), { rateLimited: true });
       } catch (_) { /* ignore */ }
     });
     s.ws.on('CB:iq,,pair-success', () => logger.warn('[pairing] pair-success: WhatsApp accepted the link, finishing login…'));
@@ -329,6 +351,7 @@ export async function startWhatsApp() {
         statusBeat.setConnected(true);
         reconnectAttempts = 0;
         pairingAttempts = 0;
+        clearPairingRateLimit(config.paths.data);
         logger.info('WhatsApp connection established');
         clearPairingQr(config.paths.data).catch(() => {});
         try {
@@ -354,7 +377,8 @@ export async function startWhatsApp() {
         heartbeat?.setConnected(false);
         statusBeat.setConnected(false);
         const code = lastDisconnect?.error?.output?.statusCode;
-        if (stopping) return;
+        if (stopping || pairingParked) return;
+        if (code === 429 && !s.authState.creds.registered) return parkPairing('connection closed with 429 while unpaired', { rateLimited: true });
         if (code === DisconnectReason.loggedOut) {
           logger.warn('Logged out from WhatsApp (session removed). Clearing saved login; a new pairing will be needed.');
           writeState('logged_out', { code });
