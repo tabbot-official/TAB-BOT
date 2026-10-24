@@ -4,7 +4,7 @@
 //   Before anything destructive runs, targets are tarred into data/ops-backup-*.
 // - Secrets are never printed: output is redacted, and reading .env/auth or env
 //   dumps is refused.
-import { exec } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -68,11 +68,37 @@ export function redact(text) {
   return t.slice(0, 3500);
 }
 
-export function execShell(cmd, { timeoutMs = 60000 } = {}) {
+// The command runs in its own process group (spawn detached) so a timeout or a stop kills the whole tree; a plain
+// exec timeout only killed /bin/sh and left e.g. "sleep 40" or a download running as an orphan. Output is capped at 1 MB.
+const MAX_OUT = 1024 * 1024;
+export function execShell(cmd, { timeoutMs = 60000, signal } = {}) {
   return new Promise((resolve) => {
-    exec(cmd, { cwd: process.cwd(), timeout: timeoutMs, maxBuffer: 1024 * 1024, env: { ...process.env, TERM: 'dumb' } }, (err, stdout, stderr) => {
-      resolve({ code: err ? (err.code ?? 1) : 0, out: redact((stdout || '') + (stderr ? '\n' + stderr : '')) });
-    });
+    let killedBy = '', out = '', err = '', size = 0, done = false;
+    const win = process.platform === 'win32';
+    const child = spawn(win ? 'cmd.exe' : '/bin/sh', win ? ['/d', '/s', '/c', cmd] : ['-c', cmd], { cwd: process.cwd(), detached: !win, env: { ...process.env, TERM: 'dumb' }, stdio: ['ignore', 'pipe', 'pipe'] });
+    const take = (which) => (chunk) => {
+      if (size >= MAX_OUT) return;
+      const s = chunk.toString('utf8').slice(0, MAX_OUT - size); size += s.length;
+      if (which === 'out') out += s; else err += s;
+      if (size >= MAX_OUT) killTree('output over 1 MB');
+    };
+    child.stdout.on('data', take('out'));
+    child.stderr.on('data', take('err'));
+    const killTree = (why) => {
+      if (killedBy || done) return; killedBy = why;
+      try { process.kill(-child.pid, 'SIGKILL'); } catch { try { child.kill('SIGKILL'); } catch { /* gone */ } }
+    };
+    const timer = setTimeout(() => killTree('timed out after ' + Math.round(timeoutMs / 1000) + ' s'), timeoutMs);
+    const onAbort = () => killTree('stopped');
+    if (signal?.aborted) onAbort(); else signal?.addEventListener?.('abort', onAbort, { once: true });
+    const finish = (code) => {
+      if (done) return; done = true;
+      clearTimeout(timer); signal?.removeEventListener?.('abort', onAbort);
+      const note = killedBy ? '\n[' + killedBy + ']' : '';
+      resolve({ code: killedBy === 'stopped' ? 130 : killedBy && killedBy.startsWith('timed out') ? 124 : killedBy ? 1 : (code ?? 1), out: redact(out + (err ? '\n' + err : '') + note) });
+    };
+    child.on('error', (e) => { err += String(e?.message || e); finish(127); });
+    child.on('close', (code) => finish(code));
   });
 }
 

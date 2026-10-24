@@ -12,6 +12,7 @@ import config from '../config/config.js';
 import logger from '../utils/logger.js';
 import { featOn } from '../config/features.js';
 import { askAi, chainStatus } from '../ai/providers.js';
+import { beginTask, endTask, taskKey, stopTasks, withTimeout, mutedCtx, runSteps, renderPlan, progressEditor, fmtSecs, TaskCancelled, StepTimeout } from '../agent/runner.js';
 import { TOOLS, parseToolStep, takeTool, toolLimits, runSearch, readUrl } from '../agent/tools.js';
 import { panelConfig, getStatus, formatStatus, getConsoleLogs, localLogs, redact as panelRedact, restartBot } from '../utilities/panel.js';
 import { registry } from '../handlers/commandHandler.js';
@@ -50,6 +51,8 @@ function quotaBump(field, feature) {
     fs.writeFileSync(QUOTA_FILE, JSON.stringify(q));
   } catch { /* best effort */ }
 }
+/** Markdown from the AI -> WhatsApp text: **bold** -> *bold*, no "#" headings. */
+export function whatsappText(t) { return String(t || '').replace(/\*\*([^*\n]+)\*\*/g, '*$1*').replace(/^#{1,6}\s+/gm, '').trim(); }
 /** Agent panel steps: read-only status/logs run; anything else (stop, kill, start...) becomes a refusal note. */
 export function screenPanelStep(step) {
   if (step.action === 'status' || step.action === 'logs') return step;
@@ -177,7 +180,7 @@ async function summarize(raw, extraInstruction = '') {
       '\n\nSummarize it for the owner in 2-4 short plain English sentences with the key numbers and names. ' +
       'Do not write any commands or code. Be direct and factual.' + (extraInstruction ? ' ' + extraInstruction : ''),
       { allowKeyless: true, temperature: 0.2 });
-    const t = String(r?.text || r || '').trim();
+    const t = whatsappText(String(r?.text || r || ''));
     if (t && t.length > 10) return t.slice(0, 1200);
   } catch (e) { logger.warn('[agent] summarizer failed: ' + (e?.message || 'error')); }
   return null; // caller falls back
@@ -842,7 +845,7 @@ function jobCtx(s, by, text, idPrefix) {
   const jid = opJid(by);
   const num = by ? String(by) : String(config.ownerNumber).replace(/\D/g, '');
   return {
-    sock: s, jid, sender: num, senderJid: jid, isOwner: true, operator: by ? String(by) : undefined, isGroup: false,
+    sock: s, jid, sender: num, senderJid: jid, isOwner: true, operator: by ? String(by) : undefined, isGroup: false, job: idPrefix,
     msg: { key: { remoteJid: jid, fromMe: false, id: idPrefix + Date.now() }, message: { conversation: '/agent ' + text } },
     text, commands: registry, args: text.split(/\s+/),
     reply: (t, o) => s.sendMessage(jid, { text: t, ...(o || {}) }),
@@ -1041,9 +1044,8 @@ export async function execStep(ctx, step, results) {
   if (step.type === 'note') { results.push({ cmd: 'note', code: 0, out: step.text }); return; }
   if (step.type === 'tool') {
     try {
-      const st = { lastResults: ctx.__lastResults || [] };
+      const st = ctx.__toolState || { lastResults: [] }; // shared object: survives the per-step ctx copies
       const r = await runSafeStep({ ...ctx, isOwner: true }, step, st);
-      ctx.__lastResults = st.lastResults;
       results.push({ cmd: step.tool + ' ' + step.arg.slice(0, 80), code: r.ok ? 0 : 1, out: (r.finding ? r.finding.text : r.text).slice(0, 2500) });
     } catch (e) { results.push({ cmd: step.tool, code: 1, out: 'Failed: ' + (e?.message || 'error') }); }
     return;
@@ -1115,7 +1117,7 @@ export async function execStep(ctx, step, results) {
     }
     return;
   }
-  const r = await shell.execShell(step.sh);
+  const r = await shell.execShell(step.sh, { signal: ctx.__signal });
   logger.info('[agent] shell: ' + step.sh.slice(0, 80) + ' -> ' + r.code);
   shell.audit('SHELL ' + step.sh + ' -> exit ' + r.code);
   results.push({ cmd: step.sh, ...r });
@@ -1155,17 +1157,26 @@ async function runShellMode(ctx, goal, taskId, seedTranscript) {
     if (lastRaw && Date.now() - lastRaw.ts < 600e3) return ctx.reply('Exact output:\n' + lastRaw.text.slice(0, 3500));
     return ctx.reply('No recent output to show. Run something first.');
   }
+  // Scheduled and resumed jobs get their own slot (they never collide with what the owner is doing); ".agent stop"
+  // from the owner still stops them, because it stops every task in the chat.
+  const liveTask = beginTask(taskKey(ctx.jid, ctx.sender) + (ctx.job ? '#' + ctx.job + Date.now() + Math.random().toString(36).slice(2, 6) : ''), goal);
+  if (!liveTask) return ctx.reply('⏳ I am still working on your last task. Send ' + config.prefix + 'agent stop to cancel it, then try again.');
   const tid = taskId || taskStart(goal);
   try {
-    return await runShellModeBody(ctx, goal, tid, seedTranscript);
+    return await runShellModeBody(ctx, goal, tid, seedTranscript, liveTask);
   } catch (e) {
     taskFinish(tid, 'failed', e?.message || 'error');
     logger.warn('[agent] task crashed: ' + (e?.stack || e?.message || 'error'));
     return ctx.reply('That task hit an internal error: ' + (e?.message || 'error') + '. Nothing was left half-applied.');
-  }
+  } finally { endTask(liveTask); }
 }
 
-async function runShellModeBody(ctx, goal, tid, seedTranscript) {
+async function runShellModeBody(ctx, goal, tid, seedTranscript, liveTask = null) {
+  ctx.__toolState = { lastResults: [] };
+  const signal = liveTask?.controller?.signal;
+  const started = Date.now();
+  const capTotal = capMs('AGENT_OWNER_TASK_CAP_S', 900);
+  let stoppedNote = null, planShown = false;
   ctx.__goal = goal;
   const prog = createProgressMessage(ctx, 'task', 20000);
   await prog.begin();
@@ -1186,17 +1197,20 @@ async function runShellModeBody(ctx, goal, tid, seedTranscript) {
   const goalNumbers = (goal.match(/\+?[0-9][0-9\s-]{6,16}[0-9]/g) || []).map((s) => s.replace(/\D/g, ''));
   const ownNumber = ctx.operator ? String(ctx.operator) : String(config.ownerNumber).replace(/\D/g, '');
   for (let round = 1; round <= 10 && executed < SH_EXEC_CAP; round++) {
+    if (signal?.aborted) { stoppedNote = 'stopped'; break; }
+    if (Date.now() - started >= capTotal) { stoppedNote = 'cap'; break; }
     let plan = null;
     try {
-      plan = await planRound(goal, transcript, jarvisCmds);
+      plan = await withTimeout(planRound(goal, transcript, jarvisCmds), 120_000, signal);
     } catch (e) {
+      if (e instanceof TaskCancelled) { stoppedNote = 'stopped'; break; }
       logger.warn('[agent] round ' + round + ' crashed: ' + (e?.stack || e?.message || 'error'));
       if (round === 1) finalNote = 'Something went wrong while planning. Try again in a moment.';
       break;
     }
     if (!plan && round === 1) {
       await new Promise((r) => setTimeout(r, 15000));
-      try { plan = await planRound(goal, transcript, jarvisCmds); } catch { plan = null; }
+      try { plan = await withTimeout(planRound(goal, transcript, jarvisCmds), 120_000, signal); } catch (e) { plan = null; if (e instanceof TaskCancelled) { stoppedNote = 'stopped'; break; } }
     }
     if (!plan) { if (round === 1) finalNote = 'I could not plan that safely. Try rephrasing the instruction.'; break; }
     if (plan.refuse) { finalNote = 'I can\'t do that: ' + plan.refuse; break; }
@@ -1259,23 +1273,48 @@ async function runShellModeBody(ctx, goal, tid, seedTranscript) {
       if (round === 1) finalNote = 'Nothing to run for that.';
       break;
     }
+    if (!planShown && round === 1 && runnable.length >= 2) {
+      planShown = true;
+      const lines = runnable.map((st, i) => (i + 1) + '. ' + ownerStepLabel(st));
+      await ctx.reply('📋 Plan (' + runnable.length + ' steps):\n' + lines.join('\n') + (stagedShells.length ? '\n(+' + stagedShells.length + ' change(s) that will wait for your YES)' : '') + '\nSend ' + config.prefix + 'agent stop to cancel.').catch(() => {});
+    }
     let si = 0;
     for (const step of runnable) {
+      if (signal?.aborted) { stoppedNote = 'stopped'; break; }
+      const leftMs = capTotal - (Date.now() - started);
+      if (leftMs <= 0) { stoppedNote = 'cap'; break; }
       si++;
       const label = step.type === 'tool' ? step.tool + ': ' + step.arg.slice(0, 50) : step.type === 'panel' ? 'panel ' + step.action : step.type === 'cmd' ? '/' + step.cmd : step.type === 'bulk' ? 'queue bulk /' + step.cmd + ' x' + step.items.length : step.type === 'send' ? 'send message' : step.type === 'schedule' ? 'set schedule' : step.type === 'note' ? 'note' : String(step.sh || '').slice(0, 60);
       try { prog.update({ name: 'Step ' + (executed + 1) + ': ' + label, received: executed, total: executed + (runnable.length - si + 1) }); } catch {}
+      let abandoned = false;
+      const stepResults = []; // per step: a late push from an abandoned step never lands in this task's results
+      const stepAc = new AbortController(); // kills a running shell step on stop or timeout
+      const onTaskAbort = () => stepAc.abort();
+      signal?.addEventListener?.('abort', onTaskAbort, { once: true });
+      const sctx = mutedCtx(ctx, () => abandoned || !!signal?.aborted);
+      sctx.__signal = stepAc.signal;
       try {
-        await execStep(ctx, step, results);
+        await withTimeout(execStep(sctx, step, stepResults), Math.min(ownerStepTimeoutMs(step), leftMs), signal);
+        results.push(...stepResults);
       } catch (e) {
-        logger.warn('[agent] step crashed: ' + (e?.stack || e?.message || 'error'));
-        results.push({ cmd: step.sh || step.cmd || step.type, code: 1, out: 'Step failed internally: ' + (e?.message || 'error') });
+        abandoned = true;
+        stepAc.abort();
+        if (e instanceof TaskCancelled) { stoppedNote = 'stopped'; results.push({ cmd: ownerStepLabel(step), code: 130, out: 'Stopped by the owner while running.' }); executed++; break; }
+        if (e instanceof StepTimeout) results.push({ cmd: ownerStepLabel(step), code: 124, out: 'Step ' + e.message + ' and was abandoned (its chat output is muted).' });
+        else {
+          logger.warn('[agent] step crashed: ' + (e?.stack || e?.message || 'error'));
+          results.push({ cmd: step.sh || step.cmd || step.type, code: 1, out: 'Step failed internally: ' + (e?.message || 'error') });
+        }
       }
+      signal?.removeEventListener?.('abort', onTaskAbort);
       executed++;
       transcript.push(results[results.length - 1].cmd + ' -> exit ' + results[results.length - 1].code + '\n' + results[results.length - 1].out);
       taskCheckpoint(tid, transcript);
     }
+    if (stoppedNote) break;
     if (stagedShells.length || restartsPlanned) break; // confirm/restart before continuing
   }
+  if (stoppedNote) { stagedShells.length = 0; restartsPlanned = 0; } // a stopped task never stages changes or restarts
 
   if (results.length) {
     lastRaw = { ts: Date.now(), text: results.map((r) => '$ ' + r.cmd + ' (exit ' + r.code + ')\n' + r.out).join('\n---\n') };
@@ -1285,6 +1324,10 @@ async function runShellModeBody(ctx, goal, tid, seedTranscript) {
   if (stagedShells.length && !finalNote) finalNote = '';
   let text = finalNote || (bulkOnly ? results.map((r) => r.out).join('\n')
     : (results.length ? ((await summarize(rawForAi)) || fallbackSummary(results)) : (stagedShells.length ? 'Nothing has run yet.' : 'Nothing to run for that.')));
+  if (stoppedNote) {
+    const head = stoppedNote === 'stopped' ? '⏹️ Stopped by you after ' + executed + ' step(s).' : '⌛ Time limit (' + fmtSecs(capTotal) + ') reached after ' + executed + ' step(s); the rest was not started.';
+    text = head + (results.length ? '\n\n' + text : '');
+  } else if (executed >= 2 && !finalNote) text = '✅ Done: ' + executed + ' steps in ' + fmtSecs(Date.now() - started) + '.\n\n' + text;
 
   if (stagedShells.length && (stagedShells.some((s) => s.sh) || restartsPlanned > 0) && !(results.length === 0 && stagedShells.length === 0)) {
     const stagedCmds = stagedShells.map((s) => s.sh);
@@ -1377,7 +1420,7 @@ export async function summarizeFindings(goal, findings, ask = ai) {
       'Write the answer for the user using ONLY what I found above. If it does not contain the answer, say so honestly. Talk to the user directly (never say "the results you provided"). ' +
       'At most 150 words, plain WhatsApp text (bold is *single asterisks*, no markdown headings). End with one line "Sources: " and the short domain names you used.',
     { allowKeyless: true, temperature: 0.2 }, 'agent-summary');
-    const text = String(r?.text || '').replace(/\*\*([^*\n]+)\*\*/g, '*$1*').replace(/^#{1,6}\s+/gm, '').trim();
+    const text = whatsappText(String(r?.text || ''));
     if (text) return text;
   } catch (e) { logger.warn('[agent] summary failed: ' + (e?.message || 'error')); }
   return findings.map((f) => '*' + f.label + '*\n' + f.text.slice(0, 900)).join('\n\n').slice(0, 3500);
@@ -1417,37 +1460,66 @@ export async function runSafeStep(ctx, step, state, deps = {}) {
 }
 function shortUrlOf(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return String(u || '').slice(0, 40); } }
 
-async function runSafeMode(ctx, goal) {
+/** Owner-mode step limits: shell 75 s (exec itself stops at 60 s), bot commands 5 min (downloads), the rest 30-45 s. */
+export function ownerStepTimeoutMs(step) {
+  return ({ sh: 75, cmd: 300, tool: 45, panel: 30, send: 30, schedule: 10, bulk: 30, note: 5 }[step.type] || 60) * 1000;
+}
+export function ownerStepLabel(step) {
+  return step.type === 'tool' ? step.tool + ': ' + step.arg.slice(0, 50) : step.type === 'panel' ? 'panel ' + step.action : step.type === 'cmd' ? config.prefix + step.cmd + (step.args ? ' ' + step.args.slice(0, 40) : '') : step.type === 'bulk' ? 'queue ' + config.prefix + step.cmd + ' x' + step.items.length : step.type === 'send' ? 'send a message to ' + step.to : step.type === 'schedule' ? 'set a schedule' : step.type === 'note' ? 'note' : String(step.sh || '').slice(0, 60);
+}
+// Step time limits (item 7): web steps are quick, media downloads get longer. AGENT_TASK_CAP_S caps a whole task.
+export function safeStepTimeoutMs(step) {
+  if (step.type === 'tool') return { search: 30, read: 30, image: 120, song: 240, video: 240, spotify: 240 }[step.tool] * 1000;
+  return 60_000;
+}
+const capMs = (envName, def) => Math.max(30, Number(process.env[envName]) || def) * 1000;
+
+/** deps (tests only): ai, runStep, stepTimeoutMs, totalCapMs. */
+export async function runSafeMode(ctx, goal, deps = {}) {
+  const task = beginTask(taskKey(ctx.jid, ctx.sender), goal);
+  if (!task) return ctx.reply('⏳ I am still working on your last ' + config.prefix + 'agent task. Send ' + config.prefix + 'agent stop to cancel it.');
+  try { return await runSafeModeBody(ctx, goal, task, deps); } finally { endTask(task); }
+}
+
+async function runSafeModeBody(ctx, goal, task, deps = {}) {
+  const signal = task.controller.signal;
   const live = await ctx.reply('🤖 Planning...').catch(() => null);
   const available = registry.list().map((c) => c.name).sort().slice(0, 80).join(', ');
   let plan = null;
   try {
-    const r = await ai(safePlannerPrompt(goal, available), { allowKeyless: true, temperature: 0.1 }, 'safe-plan');
+    const r = await withTimeout((deps.ai || ai)(safePlannerPrompt(goal, available), { allowKeyless: true, temperature: 0.1 }, 'safe-plan'), 90_000, signal);
     plan = ensureUrlsRead(goal, parseSafePlan(r?.text || r));
-  } catch (e) { logger.warn('[agent] planner failed: ' + (e?.message || 'error')); }
+  } catch (e) {
+    if (e instanceof TaskCancelled) return editOrReply(ctx, live, '⏹️ Stopped before anything ran.');
+    logger.warn('[agent] planner failed: ' + (e?.message || 'error'));
+  }
   if (!plan) {
     return editOrReply(ctx, live, 'I could not make a safe plan for that. Try a simpler goal, or use a command directly (for example ' + config.prefix + 'ask, ' + config.prefix + 'play, ' + config.prefix + 'imagine).');
   }
   const answerStep = plan.find((s) => s.answer);
   if (answerStep && plan.every((s) => s.answer)) return editOrReply(ctx, live, answerStep.answer);
   const steps = plan.filter((s) => !s.answer);
-  await editOrReply(ctx, live, '🤖 Plan (' + steps.length + ' step' + (steps.length > 1 ? 's' : '') + '):\n' + steps.map((s, i) => (i + 1) + '. ' + toolLabel(s)).join('\n') + '\n\nRunning...');
+  const title = '🤖 Plan (' + steps.length + ' step' + (steps.length > 1 ? 's' : '') + '):';
+  const stopHint = 'Send ' + config.prefix + 'agent stop to cancel.';
+  const edit = progressEditor(async (text) => { if (live?.key) await ctx.sock.sendMessage(ctx.jid, { text, edit: live.key }); });
+  await editOrReply(ctx, live, renderPlan(title, steps.map((s) => ({ label: toolLabel(s), status: 'pending' })), { footer: stopHint }));
   const state = { lastResults: [] };
-  const findings = [];
-  const notes = [];
-  for (const step of steps) {
-    try {
-      const r = await runSafeStep(ctx, step, state);
-      if (r.finding) findings.push(r.finding);
-      if (!r.ok) notes.push(r.text);
-    } catch (e) {
-      logger.warn('[agent] step ' + toolLabel(step) + ' failed: ' + (e?.message || 'error'));
-      notes.push(toolLabel(step) + ' failed. Moving on.');
-    }
-  }
-  let final = findings.length ? await summarizeFindings(goal, findings) : '';
-  if (notes.length) final += (final ? '\n\n' : '') + notes.map((n) => '⚠️ ' + n).join('\n');
-  await ctx.reply(final || '🤖 Done - ' + steps.length + ' step(s) finished.');
+  const run = await runSteps({
+    steps, ctx, signal, label: toolLabel,
+    exec: (step, stepCtx) => (deps.runStep || runSafeStep)(stepCtx, step, state),
+    stepTimeoutMs: deps.stepTimeoutMs || safeStepTimeoutMs,
+    totalCapMs: deps.totalCapMs || capMs('AGENT_TASK_CAP_S', 300),
+    onProgress: (rows, i) => edit(renderPlan('🤖 Working (' + (i + 1) + '/' + rows.length + '):', rows, { footer: stopHint })),
+  });
+  const done = run.rows.filter((r) => r.status === 'ok').length;
+  const head = run.cancelled ? '⏹️ Stopped by you' : run.capped ? '⌛ Time limit reached' : done === steps.length ? '✅ Done' : '⚠️ Finished with problems';
+  await edit(renderPlan(head + ' (' + done + '/' + steps.length + ' steps, ' + fmtSecs(run.ms) + '):', run.rows), { force: true });
+  const findings = run.rows.map((r) => r.result?.finding).filter(Boolean);
+  const problems = run.rows.map((r, i) => (['failed', 'timeout'].includes(r.status) ? '⚠️ Step ' + (i + 1) + ' (' + r.label + '): ' + (r.note || r.status) : '')).filter(Boolean);
+  let final = findings.length && !run.cancelled ? await summarizeFindings(goal, findings, deps.ai || ai) : '';
+  if (problems.length) final += (final ? '\n\n' : '') + problems.join('\n');
+  if (steps.length > 1 || run.cancelled || run.capped) final = head + ' - ' + done + '/' + steps.length + ' steps in ' + fmtSecs(run.ms) + '.' + (final ? '\n\n' + final : '');
+  if (final) await ctx.reply(final);
 }
 
 
@@ -2060,6 +2132,20 @@ export default {
     return shell.actorStore.run({ actor: shell.actorOf(ctx) }, () => agentRun(ctx));
   },
 };
+/** ".agent stop": cancel this user's running task (the owner: every task in this chat, and the download queue). */
+export async function runStop(ctx) {
+  const owner = !!ctx.isOwner;
+  const n = stopTasks(ctx.jid, ctx.sender, { allChat: owner });
+  let queue = null;
+  if (owner) { try { queue = agentqueue.cancelQueue(); } catch { queue = null; } }
+  const parts = [];
+  if (n) parts.push('⏹️ Stopped ' + (n > 1 ? n + ' running tasks' : 'the running task') + '. Steps already finished stay done; nothing more will be sent for it.');
+  if (queue && (queue.cancelled || queue.active)) parts.push('🛑 Download queue cancelled: ' + queue.cancelled + ' pending item(s).' + (queue.active ? ' The file downloading right now will finish, then everything stops.' : ''));
+  if (!parts.length) parts.push('Nothing is running right now.');
+  shell.audit('AGENT STOP by ' + String(ctx.sender || '').split('@')[0] + ' tasks=' + n);
+  return ctx.reply(parts.join('\n'));
+}
+
 async function agentRun(ctx) {
     if (!featOn('agent')) return ctx.reply('Agent mode is turned off right now.');
     const rawGoal = ctx.args.join(' ').trim();
@@ -2094,6 +2180,7 @@ async function agentRun(ctx) {
       }
     }
     if (!goal) return ctx.reply('Tell me the goal. Example: ' + config.prefix + 'agent weather in Kolkata and today\'s top news');
+    if (/^(stop|cancel|abort)$/i.test(goal)) return runStop(ctx);
     if (featOn('ownershell') && shell.isVerifiedOwnerDM(ctx)) {
       if (/^retry\b/i.test(goal)) {
         const n = agentqueue.retryFailed();
