@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { askAi, isPlaceholderKey, configuredProviders, chainStatus, resetCooling, isCooling } from '../src/ai/providers.js';
+import { askAi, isPlaceholderKey, configuredProviders, chainStatus, resetCooling, isCooling, PROVIDERS } from '../src/ai/providers.js';
 
 // Item 1 (Oct 24): one shared line-up Groq -> Gemini -> OpenRouter (free) -> Pollinations, mocked providers only.
 const KEYS = ['GROQ_API_KEY', 'GEMINI_API_KEY', 'GOOGLE_API_KEY', 'OPENROUTER_API_KEY', 'COHERE_API_KEY', 'HF_TOKEN', 'HUGGINGFACE_API_KEY', 'MISTRAL_API_KEY', 'CEREBRAS_API_KEY', 'SAMBANOVA_API_KEY', 'GITHUB_MODELS_TOKEN', 'NVIDIA_API_KEY', 'CF_API_TOKEN', 'AI_ORDER', 'GROQ_MODEL', 'GEMINI_MODEL', 'OPENROUTER_MODEL', 'KEYLESS_AI'];
@@ -91,3 +91,21 @@ test('401 bad key moves on to the next provider too', withEnv(REAL, async () => 
   const r = await askAi('hi');
   assert.equal(r.id, 'gemini'); assert.deepEqual(seen, ['groq', 'gemini']);
 }));
+
+test('404 model_not_found tries the next model of the same provider, then the next provider', withEnv(REAL, async () => {
+  const seen = [];
+  globalThis.fetch = async (u, init) => { const h = host(u); const model = h === 'gemini' ? String(u).split('/models/')[1]?.split(':')[0] : JSON.parse(init.body).model; seen.push(h + ':' + model); if (h === 'groq' && model === 'openai/gpt-oss-120b') return fail(404); if (h === 'groq') return okOpenAi('second groq model'); return okGemini('g'); };
+  const r = await askAi('hi');
+  assert.equal(r.id, 'groq'); assert.equal(r.model, 'openai/gpt-oss-20b');
+  assert.deepEqual(seen, ['groq:openai/gpt-oss-120b', 'groq:openai/gpt-oss-20b']);
+  // every Groq model gone -> Gemini answers; the dead model is remembered and skipped next time
+  seen.length = 0;
+  globalThis.fetch = async (u, init) => { const h = host(u); seen.push(h); return h === 'groq' ? fail(404) : okGemini('from gemini'); };
+  const r2 = await askAi('hi');
+  assert.equal(r2.id, 'gemini');
+  assert.deepEqual(seen.filter((x) => x === 'groq').length, 2, 'gpt-oss-120b was skipped as already dead; 20b and qwen tried');
+}));
+
+test('default Groq models contain no dead llama ids', () => {
+  assert.ok(!/llama-3\.(3-70b-versatile|1-8b-instant)/.test(String(PROVIDERS.find((p) => p.id === 'groq').models())));
+});

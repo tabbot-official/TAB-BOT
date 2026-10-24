@@ -43,7 +43,7 @@ export async function decideSearch(q) {
   return { search: c === true, via: c === null ? 'default' : 'classifier' };
 }
 
-function stripTags(html) {
+export function stripTags(html) {
   return String(html || '')
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')

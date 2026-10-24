@@ -18,7 +18,8 @@ export const PROVIDERS = [
     type: 'openai',
     baseUrl: 'https://api.groq.com/openai/v1',
     keyEnv: ['GROQ_API_KEY'],
-    models: () => (process.env.GROQ_MODEL ? [process.env.GROQ_MODEL] : ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant']),
+    // Live on Groq as read with a real key on Oct 24 2026 (the llama-3.x ids answer 404 model_not_found there).
+    models: () => (process.env.GROQ_MODEL ? [process.env.GROQ_MODEL] : ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3.8-27b']),
   },
   {
     id: 'gemini',

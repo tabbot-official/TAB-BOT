@@ -12,6 +12,7 @@ import config from '../config/config.js';
 import logger from '../utils/logger.js';
 import { featOn } from '../config/features.js';
 import { askAi, chainStatus } from '../ai/providers.js';
+import { TOOLS, parseToolStep, takeTool, toolLimits, runSearch, readUrl } from '../agent/tools.js';
 import { panelConfig, getStatus, formatStatus, getConsoleLogs, localLogs, redact as panelRedact, restartBot } from '../utilities/panel.js';
 import { registry } from '../handlers/commandHandler.js';
 import * as shell from '../utilities/ownershell.js';
@@ -105,26 +106,6 @@ function allow(user, perHour, now = Date.now()) {
   return true;
 }
 
-function parsePlan(raw) {
-  const m = String(raw || '').match(/\[[\s\S]*\]/);
-  if (!m) return null;
-  try {
-    const arr = JSON.parse(m[0]);
-    if (!Array.isArray(arr) || !arr.length) return null;
-    const steps = [];
-    for (const s of arr.slice(0, MAX_STEPS)) {
-      if (s?.answer) {
-        steps.push({ answer: String(s.answer).slice(0, 800) });
-        continue;
-      }
-      const cmd = String(s?.cmd || '').toLowerCase().replace(/[^a-z]/g, '');
-      const args = String(s?.args || '').slice(0, MAX_ARG).replace(/[\r\n]/g, ' ').trim();
-      if (!SAFE.includes(cmd)) return null; // any unsafe/unknown step rejects the whole plan
-      steps.push({ cmd, args });
-    }
-    return steps.length ? steps : null;
-  } catch { return null; }
-}
 
 export function parseShellPlan(raw) {
   const m = String(raw || '').match(/\[[\s\S]*\]/);
@@ -145,6 +126,12 @@ export function parseShellPlan(raw) {
         continue;
       }
       if (s?.restart === true) { steps.push({ type: 'restart' }); continue; }
+      if (s?.tool || (s && !s.cmd && !s.sh && Object.keys(s).some((k) => TOOLS[k.toLowerCase()]))) {
+        const t = parseToolStep(s);
+        if (!t) return null;
+        steps.push(TOOLS[t.tool].cmd ? { type: 'cmd', cmd: TOOLS[t.tool].cmd, args: t.arg } : t);
+        continue;
+      }
       if (s?.panel) {
         const action = String(s.panel?.action || s.panel).toLowerCase().replace(/[^a-z]/g, '');
         steps.push(action === 'restart' ? { type: 'restart' } : { type: 'panel', action });
@@ -1019,6 +1006,7 @@ async function planRound(goal, transcript, jarvisCmds) {
       '6. {"panel":"status"} or {"panel":"logs"} - read your own hosting server (power state, RAM/CPU/disk, last console lines) through the panel API.' + (panelConfig().ok ? '' : ' (The panel is NOT configured on this host: PANEL_URL/PANEL_SERVER_ID/PANEL_API_KEY are missing in .env - say so if the owner asks for it.)') + '\n' +
       '   For a restart use {"restart":true} (it goes through the panel when configured). Never stop or kill the server, even if asked (that takes Tab fully offline; the owner can use ' + (config.prefix || '.') + 'panel stop himself).\n' +
       '7. {"schedule":{"cron":"<5-field cron>","goal":"<future instruction>"}} - set a recurring task (IST timezone). Use for "every night 2am" style requests.\n' +
+      '8. {"search":"<web search query>"} - free web search (results come back to you); {"read":"<https URL or result:N>"} - read one public web page (result:N = the Nth result of your last search). Prefer these over curl for web lookups.\n' +
       'Bias to ACTION: when a sensible default exists, pick it and act - deliver in this chat, choose the most popular or obvious picks, never ask about folders, sources, formats or counts.\n' +
       'People write short, vague, incomplete messages. Infer the most likely meaning from context and common sense, ACT on it, and mention the assumption in your reply (e.g. "Assuming you meant X..."). Asking is the LAST resort.\n' +
       'Reply [{"ask":"one short question"}] ONLY when even a best guess is impossible (e.g. a bare "download song" or a single word like "love" with zero clues). Before asking, double-check there is really no reasonable default.\n' +
@@ -1051,6 +1039,15 @@ async function planRound(goal, transcript, jarvisCmds) {
 
 export async function execStep(ctx, step, results) {
   if (step.type === 'note') { results.push({ cmd: 'note', code: 0, out: step.text }); return; }
+  if (step.type === 'tool') {
+    try {
+      const st = { lastResults: ctx.__lastResults || [] };
+      const r = await runSafeStep({ ...ctx, isOwner: true }, step, st);
+      ctx.__lastResults = st.lastResults;
+      results.push({ cmd: step.tool + ' ' + step.arg.slice(0, 80), code: r.ok ? 0 : 1, out: (r.finding ? r.finding.text : r.text).slice(0, 2500) });
+    } catch (e) { results.push({ cmd: step.tool, code: 1, out: 'Failed: ' + (e?.message || 'error') }); }
+    return;
+  }
   if (step.type === 'panel') {
     try {
       if (!panelConfig().ok) { results.push({ cmd: 'panel ' + step.action, code: 1, out: 'The server panel is not configured (set PANEL_URL, PANEL_SERVER_ID and PANEL_API_KEY in .env).' }); return; }
@@ -1212,6 +1209,7 @@ async function runShellModeBody(ctx, goal, tid, seedTranscript) {
     for (const step of plan.steps) {
       if (step.type === 'restart') { restartsPlanned++; continue; }
       if (step.type === 'panel') { runnable.push(screenPanelStep(step)); continue; }
+      if (step.type === 'tool') { runnable.push(step); continue; }
       if (step.type === 'send') {
         if (step.to !== ownNumber && !goalNumbers.includes(step.to)) {
           runnable.push({ type: 'note', text: 'Skipped a message to ' + step.to + ' - I only message you, or a number you explicitly gave in the instruction.' });
@@ -1264,7 +1262,7 @@ async function runShellModeBody(ctx, goal, tid, seedTranscript) {
     let si = 0;
     for (const step of runnable) {
       si++;
-      const label = step.type === 'cmd' ? '/' + step.cmd : step.type === 'bulk' ? 'queue bulk /' + step.cmd + ' x' + step.items.length : step.type === 'send' ? 'send message' : step.type === 'schedule' ? 'set schedule' : step.type === 'note' ? 'note' : String(step.sh || '').slice(0, 60);
+      const label = step.type === 'tool' ? step.tool + ': ' + step.arg.slice(0, 50) : step.type === 'panel' ? 'panel ' + step.action : step.type === 'cmd' ? '/' + step.cmd : step.type === 'bulk' ? 'queue bulk /' + step.cmd + ' x' + step.items.length : step.type === 'send' ? 'send message' : step.type === 'schedule' ? 'set schedule' : step.type === 'note' ? 'note' : String(step.sh || '').slice(0, 60);
       try { prog.update({ name: 'Step ' + (executed + 1) + ': ' + label, received: executed, total: executed + (runnable.length - si + 1) }); } catch {}
       try {
         await execStep(ctx, step, results);
@@ -1316,39 +1314,140 @@ async function runShellModeBody(ctx, goal, tid, seedTranscript) {
   }
 }
 
+// ---- Safe mode (everyone): plan over read-only commands + tools (search, read, image, song, video, spotify).
+export function parseSafePlan(raw) {
+  const m = String(raw || '').match(/\[[\s\S]*\]/);
+  if (!m) return null;
+  try {
+    const arr = JSON.parse(m[0]);
+    if (!Array.isArray(arr) || !arr.length) return null;
+    const steps = [];
+    for (const s of arr.slice(0, MAX_STEPS)) {
+      if (s?.answer) { steps.push({ answer: String(s.answer).slice(0, 800) }); continue; }
+      if (s?.tool || (s && !s.cmd && Object.keys(s).some((k) => TOOLS[k.toLowerCase()]))) {
+        const t = parseToolStep(s);
+        if (!t) return null; // an unknown tool or a bad argument rejects the whole plan
+        steps.push(t);
+        continue;
+      }
+      const cmd = String(s?.cmd || '').toLowerCase().replace(/[^a-z]/g, '');
+      const args = String(s?.args || '').slice(0, MAX_ARG).replace(/[\r\n]/g, ' ').trim();
+      if (TOOLS[cmd]) { const t = parseToolStep({ tool: cmd, q: args, prompt: args, url: args }); if (!t) return null; steps.push(t); continue; }
+      if (!SAFE.includes(cmd)) return null; // any unsafe/unknown step rejects the whole plan
+      steps.push({ cmd, args });
+    }
+    return steps.length ? steps : null;
+  } catch { return null; }
+}
+
+export function safePlannerPrompt(goal, available) {
+  return 'Goal: ' + goal + '\n\n' +
+    'Plan at most ' + MAX_STEPS + ' steps. Reply with ONLY a JSON array, no other text. Step types:\n' +
+    '- {"cmd":"<command>","args":"<args>"} - run one of these bot commands (its reply goes straight to the user): ' + SAFE.join(', ') + '.\n' +
+    '- {"search":"<web search query>"} - free web search for current facts, prices, news, people, events. The results come back to you and you write the final answer from them.\n' +
+    '- {"read":"<https URL>"} - read one public web page the user gave. Use "result:1" (or result:2, result:3) to read that result of the previous search.\n' +
+    '- {"image":"<English description>"} - generate one image.\n' +
+    '- {"song":"<song name and artist, or a YouTube link>"} - send a song as audio.\n' +
+    '- {"video":"<video name, or a YouTube link>"} - send a video.\n' +
+    '- {"spotify":"<Spotify link, or song name>"} - send a song from a Spotify link.\n' +
+    '- [{"answer":"one or two sentences"}] - when no step is needed (small talk, a simple fact you are sure of) or the goal cannot be done with these steps; say clearly what you can and cannot do.\n' +
+    'Rules: prefer search for anything that may have changed recently. Keep the user\'s exact names and spellings in queries. ' +
+    'Never invent URLs - read only URLs from the goal or "result:N". For Tab capabilities, these commands exist: ' + available + ' - mention relevant ones by name in an answer. Never invent shell commands.\n' +
+    'Do not call functions; write the JSON array as plain text. Example: [{"search":"India vs Australia score today"},{"read":"result:1"}]';
+}
+
+/** A web page link the user gave that no step uses gets read first (planners sometimes search instead). Media links are left to the plan. */
+export function ensureUrlsRead(goal, plan) {
+  if (!plan) return plan;
+  const urls = (String(goal).match(/https?:\/\/[^\s<>"']+/gi) || []).map((u) => u.replace(/[),.!?]+$/, '')).slice(0, 2);
+  const used = (u) => plan.some((s) => String(s.arg || s.args || '').includes(u));
+  const media = /youtu\.?be|spotify\.com|instagram\.com|tiktok\.com|facebook\.com|fb\.watch|twitter\.com|x\.com\/|pinterest\./i;
+  const add = urls.filter((u) => !used(u) && !media.test(u)).map((u) => parseToolStep({ tool: 'read', url: u })).filter(Boolean);
+  if (!add.length) return plan;
+  return [...add, ...plan.filter((s) => !s.answer)].slice(0, MAX_STEPS);
+}
+
+const toolLabel = (s) => s.answer ? 'answer' : s.type === 'tool' ? TOOLS[s.tool].label + ': ' + s.arg.slice(0, 60) : config.prefix + s.cmd + (s.args ? ' ' + s.args : '');
+
+/** Final answer from what search/read brought back. Falls back to the raw results when the AI is unavailable. */
+export async function summarizeFindings(goal, findings, ask = ai) {
+  const block = findings.map((f) => '[' + f.label + ']\n' + f.text).join('\n\n').slice(0, 9000);
+  try {
+    const r = await ask('User goal: ' + goal + '\n\nWhat I found:\n' + block + '\n\n' +
+      'Write the answer for the user using ONLY what I found above. If it does not contain the answer, say so honestly. Talk to the user directly (never say "the results you provided"). ' +
+      'At most 150 words, plain WhatsApp text (bold is *single asterisks*, no markdown headings). End with one line "Sources: " and the short domain names you used.',
+    { allowKeyless: true, temperature: 0.2 }, 'agent-summary');
+    const text = String(r?.text || '').replace(/\*\*([^*\n]+)\*\*/g, '*$1*').replace(/^#{1,6}\s+/gm, '').trim();
+    if (text) return text;
+  } catch (e) { logger.warn('[agent] summary failed: ' + (e?.message || 'error')); }
+  return findings.map((f) => '*' + f.label + '*\n' + f.text.slice(0, 900)).join('\n\n').slice(0, 3500);
+}
+
+/** Run one safe-mode step. Returns { ok, text, finding?, results? }. Media and cmd steps reply on their own. */
+export async function runSafeStep(ctx, step, state, deps = {}) {
+  const user = ctx.sender || ctx.senderJid || '?';
+  const reg = deps.registry || registry;
+  if (step.type === 'tool') {
+    const quota = takeTool(user, step.tool, { isOwner: !!ctx.isOwner });
+    if (!quota.ok) return { ok: false, text: 'Limit reached for ' + TOOLS[step.tool].label + ' (' + toolLimits()[step.tool] + ' per hour). Try again in about ' + quota.retryMin + ' min.' };
+    if (step.tool === 'search') {
+      const r = await (deps.runSearch || runSearch)(step.arg);
+      state.lastResults = r.results || [];
+      return { ok: r.ok, text: r.ok ? 'found ' + r.results.length + ' results' : r.text, finding: { label: 'Web search: ' + step.arg, text: r.text } };
+    }
+    if (step.tool === 'read') {
+      let url = step.arg;
+      const ref = /^result:(\d)$/i.exec(url);
+      if (ref) {
+        url = state.lastResults?.[Number(ref[1]) - 1]?.url;
+        if (!url) return { ok: false, text: 'There was no search result #' + ref[1] + ' to read.' };
+      }
+      const r = await (deps.readUrl || readUrl)(url);
+      return { ok: r.ok, text: r.ok ? 'read ' + shortUrlOf(r.finalUrl || url) : r.text, finding: r.ok ? { label: 'Page: ' + (r.title || shortUrlOf(url)) + ' (' + shortUrlOf(r.finalUrl || url) + ')', text: r.text } : null };
+    }
+    const cmd = reg.get(TOOLS[step.tool].cmd);
+    if (!cmd) return { ok: false, text: config.prefix + TOOLS[step.tool].cmd + ' is not available right now.' };
+    await cmd.run({ ...ctx, args: step.arg.split(/\s+/) });
+    return { ok: true, text: 'sent' };
+  }
+  const cmd = reg.get(step.cmd);
+  if (!cmd) return { ok: false, text: config.prefix + step.cmd + ' is unavailable right now.' };
+  await cmd.run({ ...ctx, args: step.args ? step.args.split(/\s+/) : [] });
+  return { ok: true, text: 'done' };
+}
+function shortUrlOf(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return String(u || '').slice(0, 40); } }
+
 async function runSafeMode(ctx, goal) {
   const live = await ctx.reply('🤖 Planning...').catch(() => null);
   const available = registry.list().map((c) => c.name).sort().slice(0, 80).join(', ');
   let plan = null;
   try {
-    const r = await askAi(
-      'Goal: ' + goal + '\n\n' +
-      'You may plan at most ' + MAX_STEPS + ' steps using ONLY these commands: ' + SAFE.join(', ') + '.\n' +
-      'Reply with ONLY a JSON array like [{"cmd":"weather","args":"Kolkata"}].\n' +
-      'If the goal cannot be done with those commands, reply with a single step [{"answer":"one or two sentences that clearly say what you can and cannot do"}]. ' +
-      'For Tab capabilities, these commands exist: ' + available + ' - mention the relevant ones by name in the answer. Never invent shell commands.\nNo other text.',
-      { allowKeyless: true, temperature: 0.1 });
-    plan = parsePlan(r?.text || r);
+    const r = await ai(safePlannerPrompt(goal, available), { allowKeyless: true, temperature: 0.1 }, 'safe-plan');
+    plan = ensureUrlsRead(goal, parseSafePlan(r?.text || r));
   } catch (e) { logger.warn('[agent] planner failed: ' + (e?.message || 'error')); }
   if (!plan) {
-    return editOrReply(ctx, live, 'I could not make a safe plan for that. Try a simpler goal, or run the commands yourself (weather, news, ask, define, translate, wiki, time, stock, quote, lyrics).');
+    return editOrReply(ctx, live, 'I could not make a safe plan for that. Try a simpler goal, or use a command directly (for example ' + config.prefix + 'ask, ' + config.prefix + 'play, ' + config.prefix + 'imagine).');
   }
   const answerStep = plan.find((s) => s.answer);
-  if (answerStep) return editOrReply(ctx, live, answerStep.answer);
-  const names = plan.map((s) => s.cmd + (s.args ? ' ' + s.args : ''));
-  if (live?.key) { try { await ctx.sock.sendMessage(ctx.jid, { text: '🤖 Plan (' + plan.length + ' steps):\n' + names.map((n, i) => (i + 1) + '. ' + config.prefix + n).join('\n') + '\n\nRunning...', edit: live.key }); } catch {} }
-  for (const step of plan) {
-    if (step.answer) continue;
-    const cmd = registry.get(step.cmd);
-    if (!cmd) { await ctx.reply('Step skipped: /' + step.cmd + ' is unavailable right now.'); continue; }
+  if (answerStep && plan.every((s) => s.answer)) return editOrReply(ctx, live, answerStep.answer);
+  const steps = plan.filter((s) => !s.answer);
+  await editOrReply(ctx, live, '🤖 Plan (' + steps.length + ' step' + (steps.length > 1 ? 's' : '') + '):\n' + steps.map((s, i) => (i + 1) + '. ' + toolLabel(s)).join('\n') + '\n\nRunning...');
+  const state = { lastResults: [] };
+  const findings = [];
+  const notes = [];
+  for (const step of steps) {
     try {
-      await cmd.run({ ...ctx, args: step.args ? step.args.split(/\s+/) : [] });
+      const r = await runSafeStep(ctx, step, state);
+      if (r.finding) findings.push(r.finding);
+      if (!r.ok) notes.push(r.text);
     } catch (e) {
-      logger.warn('[agent] step ' + step.cmd + ' failed: ' + (e?.message || 'error'));
-      await ctx.reply('Step /' + step.cmd + ' failed. Moving on.');
+      logger.warn('[agent] step ' + toolLabel(step) + ' failed: ' + (e?.message || 'error'));
+      notes.push(toolLabel(step) + ' failed. Moving on.');
     }
   }
-  await ctx.reply('🤖 Done - ' + plan.length + ' step(s) finished.');
+  let final = findings.length ? await summarizeFindings(goal, findings) : '';
+  if (notes.length) final += (final ? '\n\n' : '') + notes.map((n) => '⚠️ ' + n).join('\n');
+  await ctx.reply(final || '🤖 Done - ' + steps.length + ' step(s) finished.');
 }
 
 
@@ -2019,7 +2118,7 @@ async function agentRun(ctx) {
       if (/^event setup$/i.test(goal)) return runEventSetup(ctx);
       const stym = goal.match(/^reply style\s+(.+)$/i); if (stym) return runReplyStyle(ctx, stym[1]);
     }
-    if (!ctx.isOwner && !allow(ctx.sender, 3)) return ctx.reply('Agent mode is taking a breather. Try again in a little while.');
+    if (!ctx.isOwner && !allow(ctx.sender, Math.max(1, Number(process.env.AGENT_USER_PER_HOUR) || 3))) return ctx.reply('Agent mode is taking a breather (limit per hour reached). Try again in a little while.');
     if (featOn('ownershell') && shell.isVerifiedOwnerDM(ctx)) {
       if (/^\s*install\b/i.test(goal) || parseInstallGoal(goal)) return runInstallFlow(ctx, goal);
       if (/^\s*update\b/i.test(goal)) return runUpdateFlow(ctx, goal);
