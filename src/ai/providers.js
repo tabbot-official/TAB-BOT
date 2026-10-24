@@ -1,19 +1,17 @@
 // AI provider registry. To add a provider, add one entry to PROVIDERS and set its key in .env.
 // type "openai" works with any OpenAI-compatible chat API (Groq, OpenRouter, DeepSeek, Mistral, ...).
-// Free tiers only. Providers without a key are skipped.
+// Free tiers only. Providers without a key (or with a placeholder like "your-key-here") are skipped.
+// Tab: ONE shared fallback line-up for .agent, .ai and .ask (and everything else that calls askAi):
+//   GROQ_API_KEY -> GEMINI_API_KEY -> OPENROUTER_API_KEY (free models) -> other keyed providers -> Pollinations (no key) last.
+// A 429, a 5xx or a timeout on a keyed provider falls straight through to the next provider, and that provider
+// cools down for a short while (its retry-after, max 2 min) so the next question doesn't hit the same wall.
+// AI_ORDER=gemini,groq,... (optional) changes the order of the keyed providers; Pollinations always stays last.
 import fs from 'node:fs';
 import path from 'node:path';
 import config from '../config/config.js';
 import logger from '../utils/logger.js';
 
 export const PROVIDERS = [
-  {
-    id: 'gemini',
-    label: 'Gemini',
-    type: 'gemini',
-    keyEnv: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
-    models: () => (process.env.GEMINI_MODEL ? [process.env.GEMINI_MODEL] : ['gemini-3.8-flash', 'gemini-flash-lite-latest', 'gemini-flash-latest', 'gemini-2.5-flash']),
-  },
   {
     id: 'groq',
     label: 'Groq',
@@ -23,12 +21,21 @@ export const PROVIDERS = [
     models: () => (process.env.GROQ_MODEL ? [process.env.GROQ_MODEL] : ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant']),
   },
   {
+    id: 'gemini',
+    label: 'Gemini',
+    type: 'gemini',
+    keyEnv: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
+    models: () => (process.env.GEMINI_MODEL ? [process.env.GEMINI_MODEL] : ['gemini-3.8-flash', 'gemini-flash-lite-latest', 'gemini-flash-latest', 'gemini-2.5-flash']),
+  },
+  {
     id: 'openrouter',
-    label: 'DeepSeek V3',
+    label: 'OpenRouter (free)',
     type: 'openai',
     baseUrl: process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1',
     keyEnv: ['OPENROUTER_API_KEY'],
-    models: () => (process.env.OPENROUTER_MODEL ? [process.env.OPENROUTER_MODEL] : ['deepseek/deepseek-chat-v3-0324:free']),
+    headers: { 'HTTP-Referer': 'https://github.com/tabbot-official/TAB-BOT', 'X-Title': 'TAB BOT' },
+    // Free models only (":free" ids cost nothing; openrouter/free routes to whichever free model is up). Read Oct 24 2026.
+    models: () => (process.env.OPENROUTER_MODEL ? [process.env.OPENROUTER_MODEL] : ['openrouter/free', 'google/gemma-4-31b-it:free', 'nvidia/nemotron-3-super-120b-a12b:free']),
   },
   {
     id: 'commanda',
@@ -170,21 +177,58 @@ function readParentEnv() {
   return out;
 }
 
+/** True for an empty key or an obvious placeholder ("your-groq-key", "change-me", "xxxx", "<key>", "sk-...", "none"). */
+export function isPlaceholderKey(v) {
+  const t = String(v ?? '').trim().replace(/^['"]|['"]$/g, '');
+  if (t.length < 8) return true; // every real free-tier key (Groq gsk_, Gemini AIza, OpenRouter sk-or-v1-) is far longer
+  if (/\s/.test(t)) return true;
+  if (/^(none|null|undefined|false|off|todo|tbd|empty|placeholder)$/i.test(t)) return true;
+  if (/your[-_ ]?(api[-_ ]?)?(key|token)|^your|change[-_ ]?me|placeholder|replace[-_ ]?(me|this)|example|insert[-_ ]|paste[-_ ]|<.*>|\.\.\./i.test(t)) return true;
+  if (/x{4,}|X{4,}|\*{3,}/.test(t)) return true;
+  return false;
+}
+
 function keyFor(p, parentEnv) {
   for (const k of p.keyEnv) {
     const v = (process.env[k] || '').trim();
-    if (v) return v;
+    if (v && !isPlaceholderKey(v)) return v;
   }
   for (const k of p.keyEnv) {
     const v = (parentEnv[k] || '').trim();
-    if (v) return v;
+    if (v && !isPlaceholderKey(v)) return v;
   }
   return '';
 }
 
+/** The shared line-up in order: keyed providers (AI_ORDER first when set), keyless last. */
+export function orderedProviders(list = PROVIDERS) {
+  const want = String(process.env.AI_ORDER || '').toLowerCase().split(/[\s,>]+/).filter(Boolean);
+  const rank = (p) => { const i = want.indexOf(p.id); return i === -1 ? want.length + PROVIDERS.indexOf(p) / 1000 : i; };
+  const keyed = list.filter((p) => !p.keyless).map((p, i) => ({ p, i }));
+  keyed.sort((a, b) => (want.length ? rank(PROVIDERS.find((x) => x.id === a.p.id)) - rank(PROVIDERS.find((x) => x.id === b.p.id)) : 0) || a.i - b.i);
+  return [...keyed.map((x) => x.p), ...list.filter((p) => p.keyless)];
+}
+
 export function configuredProviders({ allowKeyless = false } = {}) {
   const parentEnv = readParentEnv();
-  return PROVIDERS.map((p) => ({ ...p, key: keyFor(p, parentEnv) })).filter((p) => p.key || (allowKeyless && p.keyless && process.env.KEYLESS_AI !== 'off'));
+  return orderedProviders(PROVIDERS).map((p) => ({ ...p, key: keyFor(p, parentEnv) })).filter((p) => p.key || (allowKeyless && p.keyless && process.env.KEYLESS_AI !== 'off'));
+}
+
+// Provider cool-down after a 429/5xx/timeout: id -> until (ms). Skipped while cooling unless nothing else is left.
+const cooling = new Map();
+export function coolDown(id, status, retryAfterSec = 0, now = Date.now()) {
+  const sec = status === 429 ? (retryAfterSec > 0 ? Math.min(120, retryAfterSec) : 30) : 10;
+  cooling.set(id, now + sec * 1000);
+  return sec;
+}
+export function isCooling(id, now = Date.now()) { const u = cooling.get(id); if (!u) return false; if (u <= now) { cooling.delete(id); return false; } return true; }
+export function resetCooling() { cooling.clear(); }
+
+/** The line-up as the bot sees it right now (for .agent health / .panel and tests). Never includes keys. */
+export function chainStatus() {
+  const parentEnv = readParentEnv();
+  return orderedProviders(PROVIDERS).filter((p) => ['groq', 'gemini', 'openrouter'].includes(p.id) || p.keyless || keyFor(p, parentEnv))
+    .map((p) => ({ id: p.id, label: p.label, ready: p.keyless ? process.env.KEYLESS_AI !== 'off' : !!keyFor(p, parentEnv), cooling: isCooling(p.id) }));
 }
 
 async function httpJson(url, init, ms = 30000) {
@@ -196,6 +240,8 @@ async function httpJson(url, init, ms = 30000) {
     const msg = json?.error?.message || json?.message || text.slice(0, 120);
     const err = new Error(`HTTP ${r.status}: ${String(msg).slice(0, 160)}`);
     err.status = r.status;
+    const ra = Number(r.headers?.get?.('retry-after'));
+    if (ra > 0) err.retryAfter = ra;
     throw err;
   }
   return json;
@@ -260,7 +306,7 @@ async function callGemini(p, model, question, history = [], opts = {}) {
 async function callOpenAi(p, model, question, history = [], opts = {}) {
   const j = await httpJson(`${p.baseUrl}/chat/completions`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', ...(p.key ? { authorization: `Bearer ${p.key}` } : {}) },
+    headers: { 'content-type': 'application/json', ...(p.headers || {}), ...(p.key ? { authorization: `Bearer ${p.key}` } : {}) },
     body: JSON.stringify({
       model,
       messages: [{ role: 'system', content: systemFor(question) + (opts.systemSuffix ? ' ' + opts.systemSuffix : '') }, ...history.flatMap((x) => [{ role: 'user', content: x.q }, { role: 'assistant', content: x.a }]), { role: 'user', content: question }],
@@ -285,7 +331,7 @@ export async function classifyFree(sysPrompt, question, { timeoutMs = 15000 } = 
       try {
         const j = await httpJson(`${p.baseUrl}/chat/completions`, {
           method: 'POST',
-          headers: { 'content-type': 'application/json', ...(p.key ? { authorization: `Bearer ${p.key}` } : {}) },
+          headers: { 'content-type': 'application/json', ...(p.headers || {}), ...(p.key ? { authorization: `Bearer ${p.key}` } : {}) },
           body: JSON.stringify({ model, messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: question }], max_tokens: 5, temperature: 0 }),
         }, timeoutMs);
         const t = (j?.choices?.[0]?.message?.content || '').trim();
@@ -297,7 +343,7 @@ export async function classifyFree(sysPrompt, question, { timeoutMs = 15000 } = 
 }
 
 /**
- * Asks the providers in order (default first, then the rest). `prefer` is an optional provider id.
+ * Asks the shared line-up in order (Groq, Gemini, OpenRouter free, other keyed, Pollinations last). `prefer` is an optional provider id.
  * Returns { text, provider } or throws an Error with .code NO_KEYS / ALL_FAILED.
  */
 const deadModels = new Map();
@@ -308,17 +354,20 @@ export async function askAi(question, { prefer, history = [], allowKeyless = fal
     e.code = 'NO_KEYS';
     throw e;
   }
-  const ordered = prefer && list.some((p) => p.id === prefer) ? [list.find((p) => p.id === prefer), ...list.filter((p) => p.id !== prefer)] : list;
+  const preferred = prefer && list.some((p) => p.id === prefer) ? [list.find((p) => p.id === prefer), ...list.filter((p) => p.id !== prefer)] : list;
+  // Skip providers still cooling from a 429/5xx/timeout, unless that would leave nothing to try.
+  const awake = preferred.filter((p) => p.keyless || p.id === prefer || !isCooling(p.id));
+  const ordered = awake.length ? awake : preferred;
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   let announced = '';
   for (const p of ordered) {
     if (announced && onStatus) { try { onStatus(`${announced} is busy, trying ${p.label}...`); } catch { /* ui only */ } }
     announced = p.label;
-    let badKey = false;
+    let nextProvider = false;
     for (const model of p.models()) {
       const dead = deadModels.get(`${p.id}/${model}`);
       if (dead && Date.now() - dead < 6 * 3600 * 1000) continue; // 404: model gone, skip for a while
-      for (let attempt = 1; attempt <= (p.keyless ? 3 : 2); attempt++) {
+      for (let attempt = 1; attempt <= (p.keyless ? 3 : 1); attempt++) {
         try {
           const text = p.type === 'gemini' ? await callGemini(p, model, question, history, { temperature, systemSuffix }) : await callOpenAi(p, model, question, history, { temperature, systemSuffix });
           logger.info(`[ai] ok ${p.id}/${model}`);
@@ -327,16 +376,22 @@ export async function askAi(question, { prefer, history = [], allowKeyless = fal
           const st = Number(err.status) || 0;
           logger.warn(`[ai] ${p.id}/${model} failed (try ${attempt}), status ${st}, ${String(err.message || '').replace(/[\r\n]+/g, ' ').slice(0, 90)}`);
           if (st === 404) { deadModels.set(`${p.id}/${model}`, Date.now()); break; }
-          if (st === 401 || st === 403) { badKey = st === 401; break; }
+          if (st === 401 || st === 403) { nextProvider = true; break; }
           const transient = st === 0 || st === 429 || st >= 500 || (p.keyless && st === 402);
-          if (!transient || attempt === (p.keyless ? 3 : 2)) break;
+          if (transient && !p.keyless) {
+            // Keyed provider rate-limited, down or slow: straight to the next provider in the line-up.
+            const sec = coolDown(p.id, st, Number(err.retryAfter) || 0);
+            logger.warn(`[ai] ${p.id} ${st || 'timeout'}: next provider (cooling ${sec}s)`);
+            nextProvider = true; break;
+          }
+          if (!transient || attempt === 3) break;
           // Tab: the keyless provider answers 402 "1 reply every 30 seconds per IP. Retry after Ns"; wait that long (max 30 s)
           // instead of a fixed 9 s, so a second question within the window waits its turn rather than failing.
           const retryAfter = st === 402 ? Number(/retry after (\d{1,3})\s*s/i.exec(String(err.message || ''))?.[1]) : 0;
           await sleep(st === 429 ? 2500 : st === 402 ? (retryAfter > 0 ? Math.min(30, retryAfter + 1) * 1000 : 9000) : 900);
         }
       }
-      if (badKey) break;
+      if (nextProvider) break;
     }
   }
   const e = new Error('all failed');
@@ -387,7 +442,7 @@ export async function synthesizeAnswers(question, answers, { systemSuffix = '', 
       try {
         const j = await httpJson(`${p.baseUrl}/chat/completions`, {
           method: 'POST',
-          headers: { 'content-type': 'application/json', ...(p.key ? { authorization: `Bearer ${p.key}` } : {}) },
+          headers: { 'content-type': 'application/json', ...(p.headers || {}), ...(p.key ? { authorization: `Bearer ${p.key}` } : {}) },
           body: JSON.stringify({ model, messages: [{ role: 'system', content: sys }, { role: 'user', content: user }], max_tokens: 1500, temperature }),
         }, 30000);
         const text = (j?.choices?.[0]?.message?.content || '').trim();

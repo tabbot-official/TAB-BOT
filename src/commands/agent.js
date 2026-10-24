@@ -11,7 +11,7 @@ import { fetchPublic } from '../utilities/validation.js';
 import config from '../config/config.js';
 import logger from '../utils/logger.js';
 import { featOn } from '../config/features.js';
-import { askAi } from '../ai/providers.js';
+import { askAi, chainStatus } from '../ai/providers.js';
 import { registry } from '../handlers/commandHandler.js';
 import * as shell from '../utilities/ownershell.js';
 import { operatorNumbers } from '../permissions/operators.js';
@@ -47,6 +47,10 @@ function quotaBump(field, feature) {
     fs.mkdirSync('data', { recursive: true });
     fs.writeFileSync(QUOTA_FILE, JSON.stringify(q));
   } catch { /* best effort */ }
+}
+/** One line showing the shared AI line-up (never keys): "Groq ✅ → Gemini ❌ no key → ... → Pollinations ✅". */
+export function aiLineup(st = chainStatus()) {
+  return st.map((p) => p.label.replace(/ \(.*\)$/, '') + (p.ready ? (p.cooling ? ' ⏳ cooling' : ' ✅') : ' ❌ no key')).join(' → ');
 }
 async function ai(prompt, opts, feature = 'general') {
   quotaBump('calls', feature);
@@ -1491,6 +1495,7 @@ export async function runHealth(ctx) {
     '- Generated commands: ' + gen.length + ' (' + gen.filter((g) => (g.repairs || 0) > 0).length + ' repaired at least once)',
     '- Commands failing: ' + Object.keys(byCmd).length + ' (' + fails.length + ' failures total)',
     '- RAM now: ' + rss + ' MB | last bot start: ' + boot + ' (IST)',
+    '- AI line-up: ' + aiLineup(),
   ];
   if (top.length) {
     lines.push('Top failing:');
@@ -1508,7 +1513,7 @@ export async function runQuota(ctx) {
   const q = loadJson(QUOTA_FILE, null);
   if (!q || !q.day) return ctx.reply('No /agent AI calls recorded today yet.');
   const feats = Object.entries(q.byFeature || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => k + ': ' + v).join(', ');
-  await ctx.reply('Today\'s /agent AI usage (my own counters, estimates only - the providers\' real quotas live on their side):\n- Calls: ' + q.calls + '\n- Failed calls: ' + (q.failures || 0) + '\n- By feature: ' + (feats || 'none') + '\nFree-tier providers (Gemini/Cohere) apply their own daily limits; when one runs out, calls start failing and you will see it here.');
+  await ctx.reply('Today\'s /agent AI usage (my own counters, estimates only - the providers\' real quotas live on their side):\n- Calls: ' + q.calls + '\n- Failed calls: ' + (q.failures || 0) + '\n- By feature: ' + (feats || 'none') + '\nAI line-up: ' + aiLineup() + '\nFree-tier providers apply their own daily limits; when one runs out (429) the next one in the line-up answers.');
 }
 
 export async function runPermissions(ctx) {
