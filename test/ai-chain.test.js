@@ -96,8 +96,8 @@ test('404 model_not_found tries the next model of the same provider, then the ne
   const seen = [];
   globalThis.fetch = async (u, init) => { const h = host(u); const model = h === 'gemini' ? String(u).split('/models/')[1]?.split(':')[0] : JSON.parse(init.body).model; seen.push(h + ':' + model); if (h === 'groq' && model === 'openai/gpt-oss-120b') return fail(404); if (h === 'groq') return okOpenAi('second groq model'); return okGemini('g'); };
   const r = await askAi('hi');
-  assert.equal(r.id, 'groq'); assert.equal(r.model, 'openai/gpt-oss-20b');
-  assert.deepEqual(seen, ['groq:openai/gpt-oss-120b', 'groq:openai/gpt-oss-20b']);
+  assert.equal(r.id, 'groq'); assert.equal(r.model, 'qwen/qwen3.8-27b');
+  assert.deepEqual(seen, ['groq:openai/gpt-oss-120b', 'groq:qwen/qwen3.8-27b']);
   // every Groq model gone -> Gemini answers; the dead model is remembered and skipped next time
   seen.length = 0;
   globalThis.fetch = async (u, init) => { const h = host(u); seen.push(h); return h === 'groq' ? fail(404) : okGemini('from gemini'); };

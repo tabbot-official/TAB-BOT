@@ -22,6 +22,14 @@ function isLiteralish(node) {
   return false;
 }
 
+function literalValue(node) {
+  if (node.type === 'Literal') return node.value;
+  if (node.type === 'TemplateLiteral') return node.quasis.map((q) => q.value.cooked).join('');
+  if (node.type === 'UnaryExpression') { const v = literalValue(node.argument); return node.operator === '-' ? -v : +v; }
+  if (node.type === 'ArrayExpression') return node.elements.map(literalValue);
+  return undefined;
+}
+
 function keyName(prop) {
   return prop.key && (prop.key.type === 'Identifier' ? prop.key.name : prop.key.type === 'Literal' ? String(prop.key.value) : null);
 }
@@ -57,11 +65,16 @@ export function validateGeneratedSource(code, expectedBody) {
   const run2 = d2.declarations[0].init;
   if (!run2 || run2.type !== 'ArrowFunctionExpression' || !run2.async || run2.body.type !== 'BlockStatement') return fail('__run must be the fixed async arrow with a block body');
   if (d3.type !== 'ExpressionStatement' || d3.expression.type !== 'AwaitExpression') return fail('last statement in run() must be the fixed await __run(__ctx)');
+  const inner = code.slice(run2.body.start + 1, run2.body.end - 1);
   if (expectedBody != null) {
-    const inner = code.slice(run2.body.start + 1, run2.body.end - 1);
     if (inner !== '\n' + expectedBody + '\n    ') return fail('the code inside __run does not match the approved body - the wrapper was escaped');
   }
-  return { ok: true };
+  // body + literal metadata let the loader run the body in the sandbox
+  // (src/utils/sandbox.js) without ever importing the module in-process.
+  const meta = {};
+  for (const p of obj.properties) { const k = keyName(p); if (k !== 'run') meta[k] = literalValue(p.value); }
+  const body = inner.startsWith('\n') && inner.endsWith('\n    ') ? inner.slice(1, -5) : inner;
+  return { ok: true, body, meta };
 }
 
 // Relaxed gate for registry-provenanced files that are NOT the exact wrapper

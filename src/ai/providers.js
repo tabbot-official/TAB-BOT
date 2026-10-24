@@ -19,7 +19,7 @@ export const PROVIDERS = [
     baseUrl: 'https://api.groq.com/openai/v1',
     keyEnv: ['GROQ_API_KEY'],
     // Live on Groq as read with a real key on Oct 24 2026 (the llama-3.x ids answer 404 model_not_found there).
-    models: () => (process.env.GROQ_MODEL ? [process.env.GROQ_MODEL] : ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3.8-27b']),
+    models: () => (process.env.GROQ_MODEL ? [process.env.GROQ_MODEL] : ['openai/gpt-oss-120b', 'qwen/qwen3.8-27b', 'openai/gpt-oss-20b']),
   },
   {
     id: 'gemini',
@@ -35,8 +35,10 @@ export const PROVIDERS = [
     baseUrl: process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1',
     keyEnv: ['OPENROUTER_API_KEY'],
     headers: { 'HTTP-Referer': 'https://github.com/tabbot-official/TAB-BOT', 'X-Title': 'TAB BOT' },
-    // Free models only (":free" ids cost nothing; openrouter/free routes to whichever free model is up). Read Oct 24 2026.
-    models: () => (process.env.OPENROUTER_MODEL ? [process.env.OPENROUTER_MODEL] : ['openrouter/free', 'google/gemma-4-31b-it:free', 'nvidia/nemotron-3-super-120b-a12b:free']),
+    // Pinned free models (":free" ids cost nothing). A specific model, not the
+    // openrouter/free router, so replies are predictable (the router could pick
+    // a reasoning model). Both ids were in OpenRouter's public model list on Oct 24 2026.
+    models: () => (process.env.OPENROUTER_MODEL ? [process.env.OPENROUTER_MODEL] : ['google/gemma-4-31b-it:free', 'nvidia/nemotron-3-super-120b-a12b:free']),
   },
   {
     id: 'commanda',
@@ -288,6 +290,18 @@ export async function geminiTranslate(text, to, { from = '', note = '' } = {}) {
   throw lastErr || new Error('translate failed');
 }
 
+/** Strip model reasoning from a reply: <think>...</think> blocks (also an
+ *  unclosed leading <think> or a stray closing tag). Only message.content is
+ *  ever read, so a separate reasoning / reasoning_content field never reaches
+ *  the chat. */
+export function stripReasoning(text) {
+  let t = String(text || '');
+  t = t.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '');
+  if (/^\s*<think(?:ing)?>/i.test(t)) t = ''; // unclosed: everything after it is reasoning
+  t = t.replace(/^[\s\S]*?<\/think(?:ing)?>/i, ''); // reasoning without its opening tag
+  return t.trim();
+}
+
 async function callGemini(p, model, question, history = [], opts = {}) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
   const j = await httpJson(url, {
@@ -299,7 +313,7 @@ async function callGemini(p, model, question, history = [], opts = {}) {
       generationConfig: genConfig(model, opts.temperature ?? 0.7),
     }),
   }, 25000);
-  const text = (j?.candidates?.[0]?.content?.parts || []).map((x) => x.text || '').join('').trim();
+  const text = stripReasoning((j?.candidates?.[0]?.content?.parts || []).filter((x) => !x.thought).map((x) => x.text || '').join(''));
   if (!text) throw new Error(`empty reply (${j?.promptFeedback?.blockReason || j?.candidates?.[0]?.finishReason || 'no text'})`);
   return text;
 }
@@ -316,7 +330,8 @@ async function callOpenAi(p, model, question, history = [], opts = {}) {
       ...(/gpt-oss/.test(model) || p.keyless ? { reasoning_effort: 'low' } : {}),
     }),
   }, 25000);
-  const text = (j?.choices?.[0]?.message?.content || '').trim();
+  const msg = j?.choices?.[0]?.message || {};
+  const text = stripReasoning(typeof msg.content === 'string' ? msg.content : ''); // never msg.reasoning / reasoning_content
   if (!text) throw new Error('empty reply');
   return text;
 }
@@ -335,7 +350,7 @@ export async function classifyFree(sysPrompt, question, { timeoutMs = 15000 } = 
           headers: { 'content-type': 'application/json', ...(p.headers || {}), ...(p.key ? { authorization: `Bearer ${p.key}` } : {}) },
           body: JSON.stringify({ model, messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: question }], max_tokens: 5, temperature: 0 }),
         }, timeoutMs);
-        const t = (j?.choices?.[0]?.message?.content || '').trim();
+        const t = stripReasoning(j?.choices?.[0]?.message?.content || '');
         if (t) return t;
       } catch (e) { logger.warn(`[ai] classify ${p.id}/${model} failed, status ${Number(e.status) || 0}`); break; }
     }
@@ -446,7 +461,7 @@ export async function synthesizeAnswers(question, answers, { systemSuffix = '', 
           headers: { 'content-type': 'application/json', ...(p.headers || {}), ...(p.key ? { authorization: `Bearer ${p.key}` } : {}) },
           body: JSON.stringify({ model, messages: [{ role: 'system', content: sys }, { role: 'user', content: user }], max_tokens: 1500, temperature }),
         }, 30000);
-        const text = (j?.choices?.[0]?.message?.content || '').trim();
+        const text = stripReasoning(j?.choices?.[0]?.message?.content || '');
         if (text) return { text, provider: answers.map((a) => a.label).join(' + ') };
       } catch (e) { logger.warn(`[ai] synthesize ${p.id}/${model} failed, status ${Number(e.status) || 0}`); break; }
     }
@@ -477,7 +492,7 @@ export async function cohereVision(jpeg, instruction, { timeoutMs = 60000 } = {}
           temperature: 0.3,
         }),
       }, timeoutMs);
-      const text = (j?.choices?.[0]?.message?.content || '').trim();
+      const text = stripReasoning(j?.choices?.[0]?.message?.content || '');
       if (text) return { text, model };
       last = new Error('empty reply');
     } catch (e) { last = e; logger.warn(`[ai] cohere vision ${model} failed, status ${Number(e.status) || 0}`); if (e.status === 401 || e.status === 403) break; }

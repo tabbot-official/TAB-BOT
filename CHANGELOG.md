@@ -1,5 +1,12 @@
 # Changelog
 
+## Tab sandbox (2026-10-24)
+- AI-written commands (.agent install / build / repair) no longer run inside the bot. Each use runs in a separate Node process with the permission model on: it can read only its own temp dir and node_modules, write only its temp dir, and has no child processes, workers, native addons, inspector or eval. No .env, auth/ or data/ access; the environment carries no secrets.
+- No network by default. A command whose code fetches gets only the bot's guarded https fetch (public addresses only, size-capped, max 10 requests); raw sockets, DNS and plain http stay blocked.
+- Limits per run: 30 s wall clock, 10 s CPU, 48 MB heap, 96 MB RSS, 32 MB temp disk, 10 replies; the whole process group is killed on any limit. One run at a time (SANDBOX_MAX_CONCURRENT).
+- The import probe of a freshly installed npm package runs in the same sandbox. Built-in pre-tested templates still run in-process. The owner's explicit shell is unchanged (owner only).
+- AI: OpenRouter pinned to google/gemma-4-31b-it:free (then nemotron-3-super:free); Groq order gpt-oss-120b -> qwen3.8-27b -> gpt-oss-20b; <think> reasoning is stripped from every reply.
+
 ## Tab audit (2026-10-24)
 - Fixed: .play/.song/.ytmp3 failed after downloading ("does not match its claimed type": YouTube's m4a is detected as video/mp4). Audio in mp4/webm containers is now sent as audio.
 - Fixed: Instagram links of the form instagram.com/<user>/reel/<id>/ were rejected.

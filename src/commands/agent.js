@@ -27,6 +27,8 @@ import path from 'node:path';
 import cron from 'node-cron';
 import { loadGenerated, saveGenerated, noteGenerated, dropGenerated, getGenerated, archiveVersion, listVersions, versionPath, logFailure, readFailures, buildCommandFile } from '../utils/genregistry.js';
 import { validateGeneratedSource } from '../utils/genstruct.js';
+import { loadGeneratedFile } from '../utils/genload.js';
+import { runSandboxed, NODE_MODULES } from '../utils/sandbox.js';
 import { pickTemplate } from '../utils/templates.js';
 import { buildKit, unpackKit } from '../utils/recovery.js';
 import * as sessions from '../utils/sessions.js';
@@ -70,7 +72,7 @@ async function ai(prompt, opts, feature = 'general') {
   catch (e) { quotaBump('failures', feature); throw e; }
 }
 // Shared codegen rules for install/builder/repair (bodies only, no imports).
-const CODEGEN_RULES = 'Rules:\n- Output ONLY raw JavaScript statements. No markdown, no code fences, no explanation, no function wrapper, NO export statements, NO import statements.\n- Load packages inside the body with await import().\n- ctx.args is the user\'s words as a string array; await ctx.reply(text) sends a plain reply; ctx.sock and ctx.jid are available for media replies; keep replies short, plain English.\n- NEVER read or print process.env, tokens, keys, .env, files under auth/, or data files like api-keys.json, dashboard-token, install-id, session-state.json. No child_process, no shell, no eval/new Function, no writes outside /tmp and data/. Only https URLs, never local or private addresses. Reply ONLY via ctx.reply or ctx.sock.sendMessage(ctx.jid, ...) - never hardcode a number or chat id.\n- On missing input, reply with the usage line. Wrap risky work in try/catch and on failure reply starting with "Error: " followed by the actual error message (first 150 chars), never a generic "failed" message. Keep it under 30 lines.\n- For multi-turn conversations you may use the sessions helper: const S = await import(\'../utils/sessions.js\'); S.begin(ctx, { cmd: \'name\', ttlMs: 300000, state: {}, onText: async (sctx, text, end) => { /* handle each reply; call end() when done */ } }); sctx has reply, jid, state.';
+const CODEGEN_RULES = 'Rules:\n- Output ONLY raw JavaScript statements. No markdown, no code fences, no explanation, no function wrapper, NO export statements, NO import statements.\n- Load packages inside the body with await import().\n- ctx.args is the user\'s words as a string array; await ctx.reply(text) sends a plain reply; ctx.sock and ctx.jid are available for media replies; keep replies short, plain English.\n- NEVER read or print process.env, tokens, keys, .env, files under auth/, or data files like api-keys.json, dashboard-token, install-id, session-state.json. No child_process, no shell, no eval/new Function, no file writes except in os.tmpdir(). Only https URLs, never local or private addresses. Reply ONLY via ctx.reply or ctx.sock.sendMessage(ctx.jid, ...) - never hardcode a number or chat id.\n- On missing input, reply with the usage line. Wrap risky work in try/catch and on failure reply starting with "Error: " followed by the actual error message (first 150 chars), never a generic "failed" message. Keep it under 30 lines.\n- The command runs in a SANDBOX (separate process): single-shot only (no multi-turn sessions, no imports of bot files like ../utils/*), no file reads outside node_modules, temp files ONLY under (await import(\'node:os\')).tmpdir(), network ONLY through fetch() or ctx.fetchPublic(url) to https URLs, about 30 s and 48 MB max.';
 // Explicit numbered list inside a goal ("1. a 2. b ..." or one per line). WhatsApp args arrive whitespace-collapsed, so
 // split on the numbers themselves. Returns {items, clean, markers}: clean=true only when the numbers run 1,2,3... in order
 // with nothing left over; markers counts every "N." / "N)" token so gaps or duplicates are reported, never silently merged.
@@ -595,25 +597,32 @@ async function runInstallFlow(ctx, goal) {
     : '';
   return ctx.reply('Plan: install ' + pkg + ' v' + meta.version + ' and add a new /' + cmdName + ' command (' + String(meta.description || 'no description').slice(0, 120) + '). A static pre-check (no package code run) plus the post-install import probe protect it; after static checks (safety scan + syntax, no generated code run) pass, Tab restarts and /' + cmdName + ' is live.' + mismatchNote + '\nNothing is installed yet. Reply YES within 5 minutes to go ahead, or NO to cancel.');
 }
+// Import probe of a freshly installed package. The package's own code runs
+// here for the first time, so it runs in the sandbox (no network, no secrets,
+// fs read limited to node_modules), never in the bot or a plain shell.
 async function probeExports(pkg) {
-  const script = "const { createRequire } = await import('node:module');"
-    + "const req = createRequire(process.cwd() + '/x.js');"
-    + "let specs = [];"
-    + "try { const pj = req('./node_modules/' + process.argv[1] + '/package.json');"
-    + " specs = Object.keys(pj.exports || {}).filter(k => k !== './package.json' && !/nsfw/i.test(k)).map(k => k === '.' ? process.argv[1] : process.argv[1] + '/' + k.slice(2)); } catch {}"
-    + "if (!specs.includes(process.argv[1])) specs.unshift(process.argv[1]);"
-    + "const out = {};"
-    + "for (const s of specs.slice(0, 8)) {"
-    + " try { const m = await import(s); out[s] = { keys: Object.keys(m).slice(0, 25), hasDefault: !!m.default }; }"
-    + " catch (e) { out[s] = { probeError: String(e.message || e).slice(0, 120) }; }"
-    + "}"
-    + "console.log(JSON.stringify(out));";
-  const r = await shell.execShell('node --input-type=module -e "' + script + '" ' + JSON.stringify(pkg), { timeoutMs: 60000 });
-  try { return JSON.parse((r.out || '').trim().split('\n').pop()); } catch { return {}; }
+  const src = 'export default async (ctx) => {\n'
+    + 'const pkg = ' + JSON.stringify(String(pkg)) + ';\n'
+    + 'const fs = await import(\'node:fs\');\n'
+    + 'let specs = [];\n'
+    + 'try { const pj = JSON.parse(fs.readFileSync(' + JSON.stringify(NODE_MODULES + '/') + ' + pkg + \'/package.json\', \'utf8\'));'
+    + ' specs = Object.keys(pj.exports || {}).filter(k => k !== \'./package.json\' && !/nsfw/i.test(k) && !k.includes(\'*\')).map(k => k === \'.\' ? pkg : pkg + \'/\' + k.slice(2)); } catch {}\n'
+    + 'if (!specs.includes(pkg)) specs.unshift(pkg);\n'
+    + 'const out = {};\n'
+    + 'for (const s of specs.slice(0, 8)) {\n'
+    + ' try { const m = await import(s); out[s] = { keys: Object.keys(m).slice(0, 25), hasDefault: !!m.default }; }\n'
+    + ' catch (e) { out[s] = { probeError: String((e.code ? e.code + \': \' : \'\') + (e.message || e)).slice(0, 120) }; }\n'
+    + '}\n'
+    + 'await ctx.reply(JSON.stringify(out));\n'
+    + '};\n';
+  let got = '';
+  const r = await runSandboxed(src, { ctx: { args: [] }, net: false, limits: { wallMs: 30000, cpuSeconds: 15 }, handlers: { reply: (t) => { got = t; } } });
+  if (!r.ok && !got) shell.audit('INSTALL probe sandbox: ' + String(r.error || '').slice(0, 150));
+  try { return JSON.parse(got); } catch { return {}; }
 }
 /** Plain-English effects of a generated body, for informed owner approval.
  *  Deterministic extraction only - recipients, external hosts, disk writes, multi-turn. */
-export function effectsSummary(body) {
+export function effectsSummary(body, { sandboxed = true } = {}) {
   const b = String(body || '');
   const hosts = [...b.matchAll(/https:\/\/([\w.-]+)/g)].map((m) => m[1]).filter((h, i, a) => a.indexOf(h) === i).slice(0, 4);
   const writesData = /writeFileSync|appendFileSync|createWriteStream/.test(b) && /data[\/'"]/.test(b);
@@ -621,8 +630,9 @@ export function effectsSummary(body) {
   const multi = /sessions\.js|S\.begin\(/.test(b);
   const effects = ['replies only in the chat that calls it' + (media ? ' (can include media)' : '')];
   effects.push(hosts.length ? 'contacts ' + hosts.join(', ') + ' over https' : 'makes no external network calls');
-  effects.push(writesData ? 'stores small files in its own data/ folder' : 'writes nothing to disk');
+  effects.push(writesData ? (sandboxed ? 'tries to store files in data/ (the sandbox blocks that; only a temp dir is writable)' : 'stores small files in its own data/ folder') : 'writes nothing to disk');
   if (multi) effects.push('while active it reads the next plain messages in that chat (multi-turn)');
+  if (sandboxed) effects.push('runs in the safety sandbox (separate process: no bot files or secrets, no shell, network only via guarded https fetch, time and memory capped)');
   return effects.join('; ') + '.';
 }
 
@@ -633,12 +643,13 @@ export function bodyProblem(b) {
   if (/\brequire\s*\(/.test(b)) return 'it used require() (use await import() inside the body instead)';
   if (/process\.env|auth\/|auth-backup|\.env\b|child_process|\bexecSync\b|\bspawn\b/.test(b)) return 'it touched env/secrets/shell (not allowed)';
   if (/\beval\s*\(|new\s+Function\s*\(/.test(b)) return 'it used eval/Function (not allowed)';
+  if (/import\s*\(\s*['"`]\.{1,2}\//.test(b)) return 'it imported a bot file (generated commands run in the sandbox and can only import npm packages and node: builtins)';
   if (/api-keys|dashboard-token|install-id|session-state/.test(b)) return 'it touched sensitive data files (not allowed)';
   if (/@s\.whatsapp\.net|@g\.us|@broadcast|@newsletter/.test(b)) return 'it named a specific chat or number (generated code must only reply to the calling chat)';
   if (/sendMessage\s*\(\s*(?!ctx\.jid\b|sctx\.jid\b)/.test(b)) return 'it messaged a chat other than the caller (ctx.reply or ctx.jid only)';
   if (/169\.254\.|127\.0\.0\.1|\blocalhost\b|0\.0\.0\.0|\[::1\]|\b10\.\d+\.\d+\.\d+|192\.168\.|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|metadata\.google/.test(b)) return 'it targeted a local or private network address (not allowed)';
   if (/['"`]http:\/\//.test(b)) return 'it used plain http (https only)';
-  if (/(?:writeFileSync|appendFileSync|createWriteStream|mkdirSync|rmSync|unlinkSync|renameSync|copyFileSync|cpSync)\s*\(\s*['"`](?!\/tmp[\/'"]|data[\/'"])/.test(b)) return 'it wrote outside data/ and /tmp (not allowed)';
+  if (/(?:writeFileSync|appendFileSync|createWriteStream|mkdirSync|rmSync|unlinkSync|renameSync|copyFileSync|cpSync)\s*\(\s*['"`](?:\/|\.\.|data[\/'"])/.test(b)) return 'it wrote to a fixed path (sandboxed commands may only write under os.tmpdir() or a plain relative file name)';
   return null;
 }
 // apicmd bodies must route every network call through the guarded ctx.fetchPublic
@@ -676,7 +687,8 @@ async function runInstallConfirmed(ctx, p) {
   if (Object.keys(exp).length && !working.length) {
     const first = broken[0];
     await rollback('no importable entry point: ' + (first ? first[0] + ' -> ' + first[1].probeError : 'probe failed'));
-    return ctx.reply('Installed ' + pkg + ' but its published code cannot be imported at all (broken package publication). ' + (first ? 'import(\'' + first[0] + '\') fails: ' + first[1].probeError : '') + ' Rolled back: package uninstalled, no command added. This needs a different package version or a hand-written command.');
+    const sbx = first && /ERR_ACCESS_DENIED|ERR_DLOPEN|addon|ERR_SANDBOX/i.test(first[1].probeError);
+    return ctx.reply('Installed ' + pkg + ' but its published code cannot be imported ' + (sbx ? 'inside the safety sandbox (it needs native code, files outside node_modules, or network at load time - generated commands run sandboxed, so it cannot be used for one). ' : 'at all (broken package publication). ') + (first ? 'import(\'' + first[0] + '\') fails: ' + first[1].probeError : '') + ' Rolled back: package uninstalled, no command added. This needs a different package version or a hand-written command.');
   }
   const expLine = 'Real import probe of the installed package (run against the ACTUAL installed files):\n'
     + working.map(([s, v]) => '- import(\'' + s + '\') WORKS. Its real exports: ' + (v.keys && v.keys.length ? v.keys.join(', ') : '(none)') + '.' + (v.hasDefault ? ' It HAS a default export.' : ' It has NO default export.')).join('\n')
@@ -1584,8 +1596,7 @@ export async function repairCommand(name, errMsg, { apply = true } = {}) {
   noteGenerated(name, { repairs: (entry.repairs || 0) + 1, lastError: String(errMsg).slice(0, 200) });
   // hot-swap the live registration so no restart is needed
   try {
-    const mod = await import('./' + name + '.js?t=' + Date.now());
-    registry.register(mod.default);
+    registry.register(await loadGeneratedFile(path.join('src', 'commands', name + '.js'), { bust: true }));
   } catch (e) {
     return { ok: false, why: 'fix written but reload failed (' + String(e?.message || e).slice(0, 80) + ') - a restart will load it' };
   }
@@ -1612,8 +1623,7 @@ export async function runRepairConfirmed(ctx, p) {
   fs.writeFileSync(file, candidate);
   noteGenerated(name, { repairs: (entry.repairs || 0) + 1 });
   try {
-    const mod = await import('./' + name + '.js?t=' + Date.now());
-    registry.register(mod.default);
+    registry.register(await loadGeneratedFile(path.join('src', 'commands', name + '.js'), { bust: true }));
   } catch (e) {
     return ctx.reply('Fix written but reload failed (' + String(e?.message || e).slice(0, 80) + ') - a restart will load it.');
   }
@@ -1785,8 +1795,7 @@ export async function runRestoreCmdConfirmed(ctx, p) {
   try {
     archiveVersion(name);
     fs.copyFileSync(file, path.join('src', 'commands', name + '.js'));
-    const mod = await import('./' + name + '.js?t=' + Date.now());
-    registry.register(mod.default);
+    registry.register(await loadGeneratedFile(path.join('src', 'commands', name + '.js'), { bust: true }));
     shell.audit('RESTORE CMD /' + name + ' <- ' + path.basename(file));
     return ctx.reply('/' + name + ' restored to the archived version and is live now.');
   } catch (e) {
@@ -1925,7 +1934,7 @@ async function runBuilderFlow(ctx, goal) {
     }
     shell.stage([], { kind: 'template', template: { key: tpl.key, cmdName: name, desc: tpl.desc, usage: tpl.usage || '<input>', minArgs: tpl.minArgs ?? 1 } });
     shell.audit('TEMPLATE STAGED ' + tpl.key + ' as /' + name);
-    return ctx.reply('Plan: add /' + name + ' from a pre-tested template (' + tpl.desc + '). No AI code writing needed for this one.\nWhat it does when used: ' + effectsSummary(tpl.body) + '\nReply YES within 5 minutes to add it, or NO to cancel.');
+    return ctx.reply('Plan: add /' + name + ' from a pre-tested template (' + tpl.desc + '). No AI code writing needed for this one.\nWhat it does when used: ' + effectsSummary(tpl.body, { sandboxed: false }) + '\nReply YES within 5 minutes to add it, or NO to cancel.');
   }
   // 2) LLM maps the requirement to a real package or a keyless free API
   const r = await ai('A WhatsApp bot owner wants a new command: "' + goal.slice(0, 200) + '".\nDecide the implementation. Reply with ONLY JSON:\n{"package":"<one real npm package name>","cmdName":"<3-15 lowercase letters>"} if an npm package fits best,\n{"api":"<one keyless free https GET endpoint>","cmdName":"<3-15 lowercase letters>","how":"<one line>"} if a keyless free public API fits best,\n{"unknown":"<one line why>"} if it needs a paid/keyed service or you are not sure. Never invent package names or URLs.', { temperature: 0.2 }, 'builder');
@@ -1990,8 +1999,7 @@ async function runTemplateConfirmed(ctx, p) {
   }
   const finalFile = path.join('src', 'commands', t.cmdName + '.js');
   fs.writeFileSync(finalFile, code);
-  const mod = await import('./' + t.cmdName + '.js?t=' + Date.now());
-  registry.register(mod.default);
+  registry.register(await loadGeneratedFile(finalFile, { bust: true }));
   noteGenerated(t.cmdName, { file: finalFile, source: 'template', template: t.key });
   shell.audit('COMMAND ADDED /' + t.cmdName + ' (template ' + t.key + ')');
   await ctx.reply('/' + t.cmdName + ' is live now (no restart needed). It is from a pre-tested template and loads correctly; if the external service it uses is down, it will say the real reason.');
@@ -2028,8 +2036,7 @@ async function runApiCmdConfirmed(ctx, p) {
   const apiNote = 'passed static checks only (safety scan + syntax; functional behavior UNVERIFIED until you run it)';
   const finalFile = path.join('src', 'commands', cmdName + '.js');
   fs.writeFileSync(finalFile, code);
-  const mod = await import('./' + cmdName + '.js?t=' + Date.now());
-  registry.register(mod.default);
+  registry.register(await loadGeneratedFile(finalFile, { bust: true }));
   noteGenerated(cmdName, { file: finalFile, source: 'builder', apiUrl: url });
   shell.audit('COMMAND ADDED /' + cmdName + ' (API ' + url.slice(0, 60) + ')');
   await ctx.reply('/' + cmdName + ' is live now (no restart needed). ' + apiNote.charAt(0).toUpperCase() + apiNote.slice(1) + '; real features are only proven when you run it - if it errors, it will show the real reason.');

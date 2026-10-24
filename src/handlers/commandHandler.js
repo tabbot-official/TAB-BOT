@@ -91,6 +91,13 @@ export async function loadCommands() {
           logger.error(`QUARANTINED generated command ${f}: structural gate failed (${v.why}). Not loaded. Inspect with "/agent history".`);
           continue;
         }
+        if (wrapperShaped) {
+          // AI-written body: never imported here; run() executes it in the
+          // sandbox child process (src/utils/sandbox.js, item 8).
+          const { generatedCommandFromSource } = await import('../utils/genload.js');
+          registry.register(await generatedCommandFromSource(head, path.join(dir, f)));
+          continue;
+        }
       }
       const mod = await import(pathToFileURL(path.join(dir, f)).href);
       registry.register(mod.default);
