@@ -53,8 +53,15 @@ export function classify(cmd) {
 }
 
 const REDACT = /([A-Za-z0-9_]*(KEY|TOKEN|SECRET|PASSWORD|PASSWD|SALT|CREDENTIAL)[A-Za-z0-9_]*\s*[=:]\s*)\S+/gi;
+// Values of secret-named env vars (PANEL_API_KEY, GROQ_API_KEY, ...) are masked wherever they appear in output.
+function secretValues(env = process.env) {
+  const out = [];
+  for (const [k, v] of Object.entries(env)) if (/(KEY|TOKEN|SECRET|PASSWORD|PASSWD|SALT|CREDENTIAL)/i.test(k) && typeof v === 'string' && v.trim().length >= 8) out.push(v.trim());
+  return out.sort((a, b) => b.length - a.length);
+}
 export function redact(text) {
   let t = String(text ?? '');
+  for (const v of secretValues()) if (t.includes(v)) t = t.split(v).join('[hidden]');
   t = t.replace(REDACT, '$1[hidden]');
   // long token-shaped blobs (32+ chars of token alphabet) are masked too
   t = t.replace(/\b[A-Za-z0-9_\-+/]{40,}={0,2}\b/g, (m) => m.length >= 40 ? '[hidden]' : m);

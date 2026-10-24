@@ -3,7 +3,7 @@ import { getToken } from '../dashboard/server.js';
 
 export default {
   name: 'dashboard',
-  aliases: ['webpanel', 'panel'],
+  aliases: ['webpanel'], // 'panel' is the hosting-server command now (panel.js)
   category: 'System',
   ownerOnly: true,
   description: 'Owner web dashboard link (live stats)',

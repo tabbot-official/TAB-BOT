@@ -12,6 +12,7 @@ import config from '../config/config.js';
 import logger from '../utils/logger.js';
 import { featOn } from '../config/features.js';
 import { askAi, chainStatus } from '../ai/providers.js';
+import { panelConfig, getStatus, formatStatus, getConsoleLogs, localLogs, redact as panelRedact, restartBot } from '../utilities/panel.js';
 import { registry } from '../handlers/commandHandler.js';
 import * as shell from '../utilities/ownershell.js';
 import { operatorNumbers } from '../permissions/operators.js';
@@ -48,6 +49,13 @@ function quotaBump(field, feature) {
     fs.writeFileSync(QUOTA_FILE, JSON.stringify(q));
   } catch { /* best effort */ }
 }
+/** Agent panel steps: read-only status/logs run; anything else (stop, kill, start...) becomes a refusal note. */
+export function screenPanelStep(step) {
+  if (step.action === 'status' || step.action === 'logs') return step;
+  return { type: 'note', text: 'Refused: I only read the server panel (status/logs) or restart through it - stopping or killing would take Tab fully offline. Use ' + (config.prefix || '.') + 'panel stop yourself if you really mean it.' };
+}
+/** The agent may run the .panel command only for reading (status / logs [n] / help). */
+export function panelCmdArgsAllowed(args) { return /^\s*((status|info|logs?|console|help)(\s+\d{1,3})?)?\s*$/i.test(String(args || '')); }
 /** One line showing the shared AI line-up (never keys): "Groq ✅ → Gemini ❌ no key → ... → Pollinations ✅". */
 export function aiLineup(st = chainStatus()) {
   return st.map((p) => p.label.replace(/ \(.*\)$/, '') + (p.ready ? (p.cooling ? ' ⏳ cooling' : ' ✅') : ' ❌ no key')).join(' → ');
@@ -118,7 +126,7 @@ function parsePlan(raw) {
   } catch { return null; }
 }
 
-function parseShellPlan(raw) {
+export function parseShellPlan(raw) {
   const m = String(raw || '').match(/\[[\s\S]*\]/);
   if (!m) return null;
   try {
@@ -137,6 +145,11 @@ function parseShellPlan(raw) {
         continue;
       }
       if (s?.restart === true) { steps.push({ type: 'restart' }); continue; }
+      if (s?.panel) {
+        const action = String(s.panel?.action || s.panel).toLowerCase().replace(/[^a-z]/g, '');
+        steps.push(action === 'restart' ? { type: 'restart' } : { type: 'panel', action });
+        continue;
+      }
       if (s?.send) {
         const to = String(s.send.to || '').replace(/\D/g, '');
         const text = String(s.send.text || '').replace(/[\r\n]{3,}/g, '\n\n').slice(0, 1000).trim();
@@ -316,7 +329,7 @@ export async function handlePendingAnswer(ctx, isYes) {
     await ctx.reply('Restarting Tab now - back in about a minute.');
     try {
       const { shutdown } = await import('../connection/whatsapp.js');
-      setTimeout(() => shutdown(0), 3000);
+      restartBot({ shutdown, log: (m) => logger.warn(m) }).catch((e) => logger.warn('[agent] restart failed: ' + (e?.message || 'error')));
     } catch (e) { logger.warn('[agent] restart failed: ' + (e?.message || 'error')); }
   }
   return true;
@@ -714,7 +727,7 @@ async function runInstallConfirmed(ctx, p) {
   noteGenerated(cmdName, { pkg, version, file: finalFile, source: 'install', probeKeys: working.flatMap(([, v]) => v.keys || []).slice(0, 40) });
   shell.audit('COMMAND ADDED /' + cmdName + ' (package ' + pkg + ')');
   await ctx.reply('Installed ' + pkg + (version ? ' v' + version : '') + '. /' + cmdName + ' ' + selfTestNote + '. Restarting Tab now - back in about a minute. Honest note: real features are only proven when you run them; if /' + cmdName + ' errors, it will now show the real reason. (Rollback: "/agent remove the ' + cmdName + ' command".)');
-  try { const { shutdown } = await import('../connection/whatsapp.js'); setTimeout(() => shutdown(0), 3000); } catch (e) { logger.warn('[agent] restart failed: ' + (e?.message || 'error')); }
+  try { const { shutdown } = await import('../connection/whatsapp.js'); restartBot({ shutdown, log: (m) => logger.warn(m) }).catch((e) => logger.warn('[agent] restart failed: ' + (e?.message || 'error'))); } catch (e) { logger.warn('[agent] restart failed: ' + (e?.message || 'error')); }
   return true;
 }
 async function runUpdateFlow(ctx, goal) {
@@ -802,7 +815,7 @@ async function runUpdateConfirmed(ctx, p) {
   shell.audit('UPDATE done, restarting for self-test: ' + desc);
   await ctx.reply('Updated ' + desc + '. Restarting Tab for the post-update self-test - back in about a minute. If the self-test fails, the backup is restored automatically.');
   if (compatNotes.length) await ctx.reply('⚠️ Compatibility warning:\n' + compatNotes.join('\n') + '\nIf the command starts failing, say "/agent repair <name>".');
-  try { const { shutdown } = await import('../connection/whatsapp.js'); setTimeout(() => shutdown(0), 3000); } catch (e) { logger.warn('[agent] restart failed: ' + (e?.message || 'error')); }
+  try { const { shutdown } = await import('../connection/whatsapp.js'); restartBot({ shutdown, log: (m) => logger.warn(m) }).catch((e) => logger.warn('[agent] restart failed: ' + (e?.message || 'error'))); } catch (e) { logger.warn('[agent] restart failed: ' + (e?.message || 'error')); }
   return true;
 }
 
@@ -1003,11 +1016,8 @@ async function planRound(goal, transcript, jarvisCmds) {
       '3. {"bulk":{"cmd":"play","items":["<item>","<item>", ...]}} - bulk media delivery (2 or more items of the same kind; for large counts prefer ONE bulk step with all items). Each item is downloaded and delivered in this chat one by one, paced, with retries and its own progress. Use it for "download N songs/videos" goals: pick that artist\'s most popular tracks or the best matches yourself, matching the requested count exactly (for N items, produce N items).\n' +
       '4. {"send":{"to":"<phone digits only>","text":"<message>"}} - send a WhatsApp message from Tab\'s own number.\n' +
       '5. {"restart":true} - restart the bot (only when actually needed, e.g. after code edits).\n' +
-      '6. Reviactyl panel control via shell curl (env vars REVIACTYL_PANEL_URL and REVIACTYL_CLIENT_KEY are set):\n' +
-      '   - status/resources: curl -s -H "Authorization: Bearer $REVIACTYL_CLIENT_KEY" $REVIACTYL_PANEL_URL/api/client/servers/ccedcbbd/resources\n' +
-      '   - list files: curl -s -H "Authorization: Bearer $REVIACTYL_CLIENT_KEY" "$REVIACTYL_PANEL_URL/api/client/servers/ccedcbbd/files/list?directory=/"\n' +
-      '   - power: curl -s -X POST -H "Authorization: Bearer $REVIACTYL_CLIENT_KEY" -H "Content-Type: application/json" -d \'{"signal":"restart"}\' $REVIACTYL_PANEL_URL/api/client/servers/ccedcbbd/power\n' +
-      '   Only ever use the "restart" signal - never "stop" or "kill", even if asked (they would take Tab fully offline). Prefer {"restart":true} for a normal bot restart.\n' +
+      '6. {"panel":"status"} or {"panel":"logs"} - read your own hosting server (power state, RAM/CPU/disk, last console lines) through the panel API.' + (panelConfig().ok ? '' : ' (The panel is NOT configured on this host: PANEL_URL/PANEL_SERVER_ID/PANEL_API_KEY are missing in .env - say so if the owner asks for it.)') + '\n' +
+      '   For a restart use {"restart":true} (it goes through the panel when configured). Never stop or kill the server, even if asked (that takes Tab fully offline; the owner can use ' + (config.prefix || '.') + 'panel stop himself).\n' +
       '7. {"schedule":{"cron":"<5-field cron>","goal":"<future instruction>"}} - set a recurring task (IST timezone). Use for "every night 2am" style requests.\n' +
       'Bias to ACTION: when a sensible default exists, pick it and act - deliver in this chat, choose the most popular or obvious picks, never ask about folders, sources, formats or counts.\n' +
       'People write short, vague, incomplete messages. Infer the most likely meaning from context and common sense, ACT on it, and mention the assumption in your reply (e.g. "Assuming you meant X..."). Asking is the LAST resort.\n' +
@@ -1041,6 +1051,17 @@ async function planRound(goal, transcript, jarvisCmds) {
 
 export async function execStep(ctx, step, results) {
   if (step.type === 'note') { results.push({ cmd: 'note', code: 0, out: step.text }); return; }
+  if (step.type === 'panel') {
+    try {
+      if (!panelConfig().ok) { results.push({ cmd: 'panel ' + step.action, code: 1, out: 'The server panel is not configured (set PANEL_URL, PANEL_SERVER_ID and PANEL_API_KEY in .env).' }); return; }
+      let out;
+      if (step.action === 'logs') { let l = []; try { l = await getConsoleLogs({ lines: 30 }); } catch { /* fall back */ } if (!l.length) l = await localLogs(30); out = l.join('\n') || 'No log lines.'; }
+      else out = formatStatus(await getStatus());
+      shell.audit('PANEL ' + step.action);
+      results.push({ cmd: 'panel ' + step.action, code: 0, out: panelRedact(shell.redact(out)).slice(0, 2500) });
+    } catch (e) { results.push({ cmd: 'panel ' + step.action, code: 1, out: panelRedact(e?.message || 'panel error') }); }
+    return;
+  }
   if (step.type === 'schedule') {
     const list = loadSchedules();
     const entry = { id: Math.random().toString(36).slice(2, 8), cron: step.cron, goal: step.goal, createdAt: Date.now(), ...(ctx.operator ? { by: String(ctx.operator) } : {}) };
@@ -1190,6 +1211,7 @@ async function runShellModeBody(ctx, goal, tid, seedTranscript) {
     const goalWantsVideo = /\bvideos?\b|\bmp4\b/i.test(goal) && !/\b(audio|mp3)\b/i.test(goal);
     for (const step of plan.steps) {
       if (step.type === 'restart') { restartsPlanned++; continue; }
+      if (step.type === 'panel') { runnable.push(screenPanelStep(step)); continue; }
       if (step.type === 'send') {
         if (step.to !== ownNumber && !goalNumbers.includes(step.to)) {
           runnable.push({ type: 'note', text: 'Skipped a message to ' + step.to + ' - I only message you, or a number you explicitly gave in the instruction.' });
@@ -1200,7 +1222,9 @@ async function runShellModeBody(ctx, goal, tid, seedTranscript) {
       if (step.type === 'cmd') {
         const found = resolveCmd(step.cmd);
         if (!found) runnable.push({ type: 'note', text: 'The /' + step.cmd + ' command is not available, so that part was skipped.' });
-        else {
+        else if (found.name === 'panel' && !/^(status|info|logs?|console|help)?\b/i.test(step.args || '')) {
+          runnable.push({ type: 'note', text: 'Refused: the agent only reads the server panel (status/logs); restart goes through a restart step, and stop/kill is yours to run with ' + (config.prefix || '.') + 'panel.' });
+        } else {
           let name = found.name;
           if (name === 'play' && goalWantsVideo && resolveCmd('video')) name = 'video';
           runnable.push({ type: 'cmd', cmd: name, args: step.args });
@@ -1287,7 +1311,7 @@ async function runShellModeBody(ctx, goal, tid, seedTranscript) {
     await ctx.reply('Restarting Tab now - back in about a minute.').catch(() => {});
     try {
       const { shutdown } = await import('../connection/whatsapp.js');
-      setTimeout(() => shutdown(0), 3000);
+      restartBot({ shutdown, log: (m) => logger.warn(m) }).catch((e) => logger.warn('[agent] restart failed: ' + (e?.message || 'error')));
     } catch (e) { logger.warn('[agent] restart failed: ' + (e?.message || 'error')); }
   }
 }
@@ -1909,7 +1933,7 @@ async function runRestoreConfirmed(ctx, p) {
     }
     shell.audit('RESTORE done: ' + restored + ' commands, ' + missing.length + ' packages');
     await ctx.reply('Restore complete: ' + restored + ' command(s), data backup applied' + (missing.length ? ', ' + missing.length + ' package(s) installed' : '') + '. Restarting now - back in about a minute.');
-    try { const { shutdown } = await import('../connection/whatsapp.js'); setTimeout(() => shutdown(0), 3000); } catch (e) { logger.warn('[agent] restart failed: ' + (e?.message || 'error')); }
+    try { const { shutdown } = await import('../connection/whatsapp.js'); restartBot({ shutdown, log: (m) => logger.warn(m) }).catch((e) => logger.warn('[agent] restart failed: ' + (e?.message || 'error'))); } catch (e) { logger.warn('[agent] restart failed: ' + (e?.message || 'error')); }
     return true;
   } catch (e) {
     return ctx.reply('Restore failed midway: ' + String(e?.message || e).slice(0, 200) + '. Command files restored so far stay in place; archived versions are under data/cmd-history.');
